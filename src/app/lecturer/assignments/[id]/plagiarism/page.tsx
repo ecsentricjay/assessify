@@ -7,8 +7,9 @@ import PlagiarismReviewClient from '@/components/lecturer/plagiarism-review-clie
 export default async function PlagiarismReviewPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createClient();
 
   // Check if user is authenticated
@@ -41,7 +42,7 @@ export default async function PlagiarismReviewPage({
         course_title
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (!assignment) {
@@ -49,7 +50,7 @@ export default async function PlagiarismReviewPage({
   }
 
   // Get flagged submissions
-  const plagiarismResult = await getFlaggedSubmissions(params.id);
+  const plagiarismResult = await getFlaggedSubmissions(id);
 
   return (
     <div className="container mx-auto py-8">
@@ -67,7 +68,7 @@ export default async function PlagiarismReviewPage({
 
       {plagiarismResult.success && plagiarismResult.data ? (
         <PlagiarismReviewClient
-          assignmentId={params.id}
+          assignmentId={id}
           lecturerId={user.id}
           plagiarismData={plagiarismResult.data}
         />

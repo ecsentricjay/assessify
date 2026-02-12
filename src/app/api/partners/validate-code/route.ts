@@ -19,16 +19,7 @@ export async function GET(request: NextRequest) {
     // Check if partner code exists and is active
     const { data: partner, error } = await supabase
       .from('partners')
-      .select(`
-        id,
-        partner_code,
-        business_name,
-        status,
-        user_id,
-        profiles!partners_user_id_fkey (
-          full_name
-        )
-      `)
+      .select('id, partner_code, business_name, status')
       .eq('partner_code', code.toUpperCase())
       .eq('status', 'active')
       .single()
@@ -41,9 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Return partner name for display
-    const partnerName = partner.business_name || 
-                        (partner.profiles as any)?.full_name || 
-                        'Partner'
+    const partnerName = partner.business_name || 'Valid Partner'
 
     return NextResponse.json({
       valid: true,

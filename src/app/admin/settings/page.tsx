@@ -1,6 +1,7 @@
 // app/admin/settings/page.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import SystemSettingsForm from '@/components/admin/system-settings-form'
+import PricingSettingsForm from '@/components/admin/pricing-settings-form'
 
 export default async function AdminSettingsPage() {
   // In a real app, fetch current settings from database
@@ -13,13 +14,20 @@ export default async function AdminSettingsPage() {
     systemNotes: '',
   }
 
+  const pricingSettings = {
+    assignmentWriterBase: 200, // ₦200 for 1-1000 words
+    assignmentWriterPerBracket: 100, // ₦100 per additional 1-1000 words
+    assignmentSubmissionBase: 100, // Default: lecturer sets this
+    testSubmissionBase: 50, // Default flat rate for tests
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">System Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Configure platform fees and commission rates
+          Configure platform fees, commission rates, and pricing
         </p>
       </div>
 
@@ -68,6 +76,19 @@ export default async function AdminSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Pricing Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Service Pricing</CardTitle>
+          <CardDescription>
+            Configure pricing for different services
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PricingSettingsForm initialSettings={pricingSettings} />
+        </CardContent>
+      </Card>
+
       {/* Settings Form */}
       <Card>
         <CardHeader>
@@ -90,6 +111,7 @@ export default async function AdminSettingsPage() {
               <li>Changing fees will affect all future submissions</li>
               <li>Existing transactions are not affected by fee changes</li>
               <li>Commission rate changes apply to new partner earnings only</li>
+              <li>Assignment Writer: ₦200 for 1-1000 words, then +₦100 per bracket</li>
               <li>Always test changes in a staging environment first</li>
               <li>Ensure total percentages add up correctly (Lecturer + Partner + Platform = 100%)</li>
             </ul>

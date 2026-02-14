@@ -5,6 +5,7 @@ import { getMyPartnerProfile } from '@/lib/actions/partner.actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import PartnerProfileForm from '@/components/partner/partner-profile-form'
+import PasswordChangeForm from '@/components/partner/password-change-form'
 
 export default async function PartnerProfilePage() {
   const profileResult = await getMyPartnerProfile()
@@ -102,6 +103,19 @@ export default async function PartnerProfilePage() {
         </CardHeader>
         <CardContent>
           <PartnerProfileForm partner={partner} />
+        </CardContent>
+      </Card>
+
+      {/* Password Change */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Security</CardTitle>
+          <CardDescription>
+            Change your account password
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PasswordChangeForm />
         </CardContent>
       </Card>
     </div>

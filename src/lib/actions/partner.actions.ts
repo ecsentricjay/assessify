@@ -4,6 +4,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { sendPartnerCredentialsEmail } from './email.actions'
 import {
   CreatePartnerData,
   UpdatePartnerData,
@@ -155,6 +156,20 @@ export async function createPartner(
         email: data.email,
       },
     })
+
+    // Send partner credentials email
+    try {
+      await sendPartnerCredentialsEmail(
+        data.email,
+        data.firstName,
+        data.lastName,
+        temporaryPassword,
+        partnerCode as string
+      )
+    } catch (emailError) {
+      console.error('Failed to send partner credentials email:', emailError)
+      // Don't fail the partner creation if email fails
+    }
 
     revalidatePath('/admin/partners')
 

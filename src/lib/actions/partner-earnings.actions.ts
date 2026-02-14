@@ -80,12 +80,53 @@ export async function getPartnerReferrals(
       return { error: error.message }
     }
 
+    // Enrich referrals with submission statistics
+    const enrichedData = await Promise.all(
+      (data || []).map(async (referral: any) => {
+        try {
+          // Get submissions count and revenue for this referred lecturer
+          const { data: submissionStats } = await supabase
+            .from('assignment_submissions')
+            .select('cost_deducted', { count: 'exact' })
+            .eq('student_id', referral.referred_lecturer_id)
+
+          const submissionCount = submissionStats?.length || 0
+          const totalRevenue = (submissionStats || []).reduce((sum: number, sub: any) => sum + (sub.cost_deducted || 0), 0)
+          
+          // Get partner's commission rate
+          const { data: partner } = await supabase
+            .from('partners')
+            .select('commission_rate')
+            .eq('id', partnerId)
+            .single()
+
+          const commissionRate = partner?.commission_rate || 15
+          const partnerEarnings = Math.round((totalRevenue * commissionRate) / 100)
+
+          return {
+            ...referral,
+            total_submissions: submissionCount,
+            total_revenue: totalRevenue,
+            partner_earnings: partnerEarnings,
+          }
+        } catch (err) {
+          console.error('Error enriching referral data:', err)
+          return {
+            ...referral,
+            total_submissions: 0,
+            total_revenue: 0,
+            partner_earnings: 0,
+          }
+        }
+      })
+    )
+
     const totalPages = Math.ceil((count || 0) / limit)
 
     return {
       success: true,
       data: {
-        data: data || [],
+        data: enrichedData || [],
         total: count || 0,
         page,
         limit,

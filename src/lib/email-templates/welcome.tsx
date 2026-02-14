@@ -116,7 +116,7 @@ export function WelcomeEmail({
             fontWeight: 'bold',
           }}
         >
-          Go to Dashboard
+          Login to Assessify
         </a>
       </div>
 

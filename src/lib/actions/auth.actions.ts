@@ -307,3 +307,28 @@ export async function updateProfile(formData: {
   revalidatePath('/', 'layout')
   return { success: true, message: 'Profile updated successfully!' }
 }
+
+export async function changePassword(newPassword: string) {
+  const supabase = await createClient()
+  const user = await getCurrentUser()
+
+  if (!user) {
+    return { error: 'Not authenticated' }
+  }
+
+  // Validate password strength
+  if (newPassword.length < 8) {
+    return { error: 'Password must be at least 8 characters long' }
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/', 'layout')
+  return { success: true, message: 'Password changed successfully!' }
+}

@@ -99,3 +99,41 @@ export async function getUserWalletBalance(userId: string) {
     return { success: false, error: 'Failed to get wallet balance' };
   }
 }
+
+export async function getPreviousAIAssignments(userId: string, limit: number = 10) {
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+
+    // Get AI assignments from notifications or dedicated table
+    // Assuming we store them in notifications metadata
+    const { data: notifications } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('type', 'system')
+      .contains('metadata', { service: 'ai_assignment' })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (!notifications) {
+      return { success: true, assignments: [] };
+    }
+
+    const assignments = notifications
+      .map((notif: any) => ({
+        id: notif.id,
+        title: notif.metadata?.course || 'Untitled Assignment',
+        courseName: notif.metadata?.course,
+        wordCount: notif.metadata?.word_count,
+        cost: notif.metadata?.cost,
+        createdAt: notif.created_at,
+      }))
+      .filter((a) => a.courseName);
+
+    return { success: true, assignments };
+  } catch (error) {
+    console.error('Error getting previous AI assignments:', error);
+    return { success: true, assignments: [] };
+  }
+}

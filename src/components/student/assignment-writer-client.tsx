@@ -11,7 +11,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Sparkles, Copy, Wallet, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
+import { Sparkles, Copy, Wallet, AlertCircle, Loader2, CheckCircle, Clock } from 'lucide-react';
+import { FormattedAssignmentContent } from './formatted-assignment-content';
+
+interface PreviousAssignment {
+  id: string;
+  title: string;
+  courseName?: string;
+  wordCount?: number;
+  cost?: number;
+  createdAt: string;
+}
 
 export default function AssignmentWriterClient({
   userId,
@@ -26,12 +36,14 @@ export default function AssignmentWriterClient({
   const [wordCount, setWordCount] = useState(1000);
   const [citationStyle, setCitationStyle] = useState<'APA' | 'MLA' | 'Harvard' | 'Chicago' | 'IEEE'>('APA');
   const [additionalInfo, setAdditionalInfo] = useState('');
-  const [estimatedCost, setEstimatedCost] = useState(100);
+  const [estimatedCost, setEstimatedCost] = useState(200);
   const [balance, setBalance] = useState(initialBalance);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
   const [actualWordCount, setActualWordCount] = useState(0);
   const [actualCost, setActualCost] = useState(0);
+  const [previousAssignments, setPreviousAssignments] = useState<PreviousAssignment[]>([]);
+  const [selectedPrevious, setSelectedPrevious] = useState<string | null>(null);
 
   // Update cost estimate when word count changes
   useEffect(() => {
@@ -43,6 +55,18 @@ export default function AssignmentWriterClient({
     };
     updateCost();
   }, [wordCount]);
+
+  // Fetch previous assignments on component mount
+  useEffect(() => {
+    const fetchPreviousAssignments = async () => {
+      const { getPreviousAIAssignments } = await import('@/lib/actions/assignment-ai.actions');
+      const result = await getPreviousAIAssignments(userId, 5);
+      if (result.success) {
+        setPreviousAssignments(result.assignments);
+      }
+    };
+    fetchPreviousAssignments();
+  }, [userId]);
 
   const handleGenerate = async () => {
     // Validation
@@ -143,7 +167,9 @@ export default function AssignmentWriterClient({
                 How it works
               </p>
               <ul className="text-sm text-foreground dark:text-blue-200 space-y-1">
-                <li>• ₦100 is charged per 1-2000 words generated</li>
+                <li>• ₦200 for 1-1000 words</li>
+                <li>• ₦300 for 1001-2000 words</li>
+                <li>• ₦400 for 2001-3000 words (and so on...)</li>
                 <li>• Each assignment is unique and plagiarism-free</li>
                 <li>• Proper academic citations are included</li>
                 <li>• Copy and paste the result into your document</li>
@@ -213,6 +239,9 @@ export default function AssignmentWriterClient({
                 onChange={(e) => setWordCount(Number(e.target.value))}
                 disabled={isGenerating}
               />
+              <p className="text-xs text-text-gray">
+                💡 Tip: ~1 page ≈ 250 words
+              </p>
               <p className="text-xs text-text-gray">
                 Estimated cost: ₦{estimatedCost}
               </p>
@@ -323,9 +352,7 @@ export default function AssignmentWriterClient({
                   <span className="text-sm font-medium">Generation Complete</span>
                 </div>
                 <div className="prose prose-sm dark:prose-invert max-w-none max-h-[600px] overflow-y-auto p-4 bg-bg-light rounded-lg">
-                  <pre className="whitespace-pre-wrap font-sans text-sm">
-                    {generatedContent}
-                  </pre>
+                  <FormattedAssignmentContent content={generatedContent} />
                 </div>
               </div>
             ) : (
@@ -339,6 +366,42 @@ export default function AssignmentWriterClient({
           </CardContent>
         </Card>
       </div>
+
+      {/* Previous Assignments */}
+      {previousAssignments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Previous Assignments
+            </CardTitle>
+            <CardDescription>
+              View your past AI-generated assignments
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {previousAssignments.map((assignment) => (
+                <div
+                  key={assignment.id}
+                  className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => setSelectedPrevious(selectedPrevious === assignment.id ? null : assignment.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{assignment.title}</p>
+                      <p className="text-xs text-gray-600">
+                        {assignment.wordCount} words • ₦{assignment.cost} • {new Date(assignment.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge variant="outline">{assignment.wordCount} words</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

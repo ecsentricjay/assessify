@@ -25,11 +25,16 @@ export interface AssignmentResponse {
 
 /**
  * Calculate cost based on word count
- * N100 per 1-2000 words
+ * ₦200 for 1-1000 words, then +₦100 for each additional 1-1000 words
+ * e.g., 1-1000 = ₦200, 1001-2000 = ₦300, 2001-3000 = ₦400, etc.
  */
 export async function calculateAssignmentCost(wordCount: number): Promise<number> {
-  const brackets = Math.ceil(wordCount / 2000);
-  return brackets * 100;
+  if (wordCount <= 1000) {
+    return 200; // ₦200 for up to 1000 words
+  }
+  // For words beyond 1000, add ₦100 for each additional 1000-word bracket
+  const additionalBrackets = Math.ceil((wordCount - 1000) / 1000);
+  return 200 + (additionalBrackets * 100);
 }
 
 /**

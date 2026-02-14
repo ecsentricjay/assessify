@@ -11,6 +11,7 @@ import {
   PasswordResetEmail,
   PaymentReceiptEmail,
   WelcomeEmail,
+  PartnerCredentialsEmail,
 } from '@/lib/email-templates'
 
 /**
@@ -23,7 +24,10 @@ export async function sendWelcomeEmail(
   role: string
 ) {
   try {
-    const dashboardUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/${role}/dashboard`
+    // Partners go directly to login, others to their dashboard
+    const dashboardUrl = role === 'partner' 
+      ? `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
+      : `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
 
     const html = (await render(
       WelcomeEmail({
@@ -43,6 +47,44 @@ export async function sendWelcomeEmail(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('Welcome email send error:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Send partner credentials email with login information
+ */
+export async function sendPartnerCredentialsEmail(
+  email: string,
+  firstName: string,
+  lastName: string,
+  temporaryPassword: string,
+  partnerCode: string
+) {
+  try {
+    const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
+
+    const html = (await render(
+      PartnerCredentialsEmail({
+        firstName,
+        lastName,
+        email,
+        temporaryPassword,
+        partnerCode,
+        loginUrl,
+      })
+    )).toString()
+
+    const result = await sendEmail({
+      to: email,
+      subject: `Your Assessify Partner Account Credentials 🤝`,
+      html,
+    })
+
+    return result
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Partner credentials email send error:', message)
     return { success: false, error: message }
   }
 }

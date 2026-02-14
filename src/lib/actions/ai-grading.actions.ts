@@ -735,11 +735,16 @@ export async function aiGradeAllAssignmentSubmissions(
       .from("assignments")
       .select("id, created_by, title, instructions, max_score")
       .eq("id", assignmentId)
-      .single();
+      .maybeSingle();
 
-    if (assignmentError || !assignment) {
+    if (assignmentError) {
       console.error("Assignment lookup error:", assignmentError);
-      throw new Error("Assignment not found");
+      throw new Error(`Failed to fetch assignment: ${assignmentError.message}`);
+    }
+
+    if (!assignment) {
+      console.error("Assignment not found for ID:", assignmentId);
+      throw new Error(`Assignment not found. ID: ${assignmentId}`);
     }
 
     // Verify lecturer owns this assignment
@@ -895,11 +900,16 @@ export async function aiGradeAllStandaloneSubmissions(
       .from("standalone_assignments")
       .select("id, created_by, title, instructions, max_score")
       .eq("id", assignmentId)
-      .single();
+      .maybeSingle();
 
-    if (assignmentError || !assignment) {
+    if (assignmentError) {
       console.error("Standalone assignment lookup error:", assignmentError);
-      throw new Error("Assignment not found");
+      throw new Error(`Failed to fetch assignment: ${assignmentError.message}`);
+    }
+
+    if (!assignment) {
+      console.error("Standalone assignment not found for ID:", assignmentId);
+      throw new Error(`Assignment not found. ID: ${assignmentId}`);
     }
 
     // Verify lecturer owns this assignment

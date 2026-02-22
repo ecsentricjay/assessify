@@ -12,7 +12,27 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Users, TrendingUp, DollarSign } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, FileText, ClipboardCheck } from 'lucide-react'
+
+interface ReferralWithBreakdown {
+  id: string
+  referral_code?: string
+  status?: string
+  total_submissions?: number
+  total_revenue?: number
+  partner_earnings?: number
+  assignment_submissions?: number
+  test_submissions?: number
+  assignment_revenue?: number
+  test_revenue?: number
+  created_at?: string
+  lecturer?: {
+    full_name?: string
+    email?: string
+    department?: string
+    faculty?: string
+  }
+}
 
 export default async function PartnerReferralsPage() {
   const result = await getMyReferrals({
@@ -21,12 +41,19 @@ export default async function PartnerReferralsPage() {
     sortOrder: 'desc',
   })
 
-  const referrals = result.data?.data || []
+  const referrals = (result.data?.data || []) as ReferralWithBreakdown[]
+  
 
   // Calculate totals
   const totalSubmissions = referrals.reduce((sum, r) => sum + (r.total_submissions ?? 0), 0)
   const totalRevenue = referrals.reduce((sum, r) => sum + Number(r.total_revenue), 0)
   const totalEarnings = referrals.reduce((sum, r) => sum + Number(r.partner_earnings), 0)
+  
+  // ✅ NEW: Calculate breakdown by type
+  const assignmentSubmissions = referrals.reduce((sum, r) => sum + (r.assignment_submissions ?? 0), 0)
+  const testSubmissions = referrals.reduce((sum, r) => sum + (r.test_submissions ?? 0), 0)
+  const assignmentRevenue = referrals.reduce((sum, r) => sum + Number(r.assignment_revenue ?? 0), 0)
+  const testRevenue = referrals.reduce((sum, r) => sum + Number(r.test_revenue ?? 0), 0)
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary'> = {
@@ -52,7 +79,7 @@ export default async function PartnerReferralsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Lecturers</CardTitle>
@@ -79,28 +106,59 @@ export default async function PartnerReferralsPage() {
           </CardContent>
         </Card>
 
+        {/* ✅ NEW: Assignment Breakdown */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Your Earnings</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Assignments</CardTitle>
+            <FileText className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ₦{totalEarnings.toLocaleString()}
-            </div>
+            <div className="text-2xl font-bold text-blue-600">{assignmentSubmissions}</div>
             <p className="text-xs text-muted-foreground">
-              From these referrals
+              ₦{assignmentRevenue.toLocaleString()} revenue
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* ✅ NEW: Test Breakdown */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tests</CardTitle>
+            <ClipboardCheck className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">{testSubmissions}</div>
+            <p className="text-xs text-muted-foreground">
+              ₦{testRevenue.toLocaleString()} revenue
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Earnings Summary Card */}
+      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-green-600" />
+            Your Total Earnings
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-4xl font-bold text-green-600">
+            ₦{totalEarnings.toLocaleString()}
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            15% commission from all referral submissions
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Referrals Table */}
       <Card>
         <CardHeader>
           <CardTitle>All Referrals</CardTitle>
           <CardDescription>
-            Complete list of lecturers you&apos;ve referred
+            Complete list of lecturers you&apos;ve referred with submission breakdown
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -111,16 +169,18 @@ export default async function PartnerReferralsPage() {
               <p className="text-sm mt-1">Share your referral code with lecturers to get started</p>
             </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Lecturer</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Submissions</TableHead>
-                    <TableHead className="text-right">Revenue Generated</TableHead>
-                    <TableHead className="text-right">Your Earnings</TableHead>
+                    <TableHead className="text-center">Assignments</TableHead>
+                    <TableHead className="text-center">Tests</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">Earnings</TableHead>
                     <TableHead>Joined</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -140,15 +200,46 @@ export default async function PartnerReferralsPage() {
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(referral.status || 'inactive')}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {referral.total_submissions}
+                      
+                      {/* ✅ NEW: Assignment Submissions Column */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center">
+                          <span className="font-medium text-blue-600">
+                            {referral.assignment_submissions || 0}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            ₦{Number(referral.assignment_revenue || 0).toLocaleString()}
+                          </span>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        ₦{Number(referral.total_revenue).toLocaleString()}
+
+                      {/* ✅ NEW: Test Submissions Column */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center">
+                          <span className="font-medium text-purple-600">
+                            {referral.test_submissions || 0}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            ₦{Number(referral.test_revenue || 0).toLocaleString()}
+                          </span>
+                        </div>
                       </TableCell>
+
+                      {/* Total Submissions */}
+                      <TableCell className="text-right font-bold">
+                        {referral.total_submissions || 0}
+                      </TableCell>
+
+                      {/* Total Revenue */}
+                      <TableCell className="text-right font-medium">
+                        ₦{Number(referral.total_revenue || 0).toLocaleString()}
+                      </TableCell>
+
+                      {/* Partner Earnings */}
                       <TableCell className="text-right font-bold text-green-600">
-                        ₦{Number(referral.partner_earnings).toLocaleString()}
+                        ₦{Number(referral.partner_earnings || 0).toLocaleString()}
                       </TableCell>
+
                       <TableCell className="text-sm text-muted-foreground">
                         {referral.created_at ? new Date(referral.created_at).toLocaleDateString() : '-'}
                       </TableCell>

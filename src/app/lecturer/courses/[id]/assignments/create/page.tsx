@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createAssignment } from '@/lib/actions/assignment.actions'
 import { getCourseById } from '@/lib/actions/course.actions'
+import { getDefaultSubmissionCost } from '@/lib/actions/settings.actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +26,7 @@ export default function CreateCourseAssignmentPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [defaultSubmissionCost, setDefaultSubmissionCost] = useState(200)
   
   const [assignmentType, setAssignmentType] = useState('general')
   const [lateSubmissionAllowed, setLateSubmissionAllowed] = useState(false)
@@ -33,7 +35,7 @@ export default function CreateCourseAssignmentPage() {
   const [aiRubric, setAiRubric] = useState('')
 
   useEffect(() => {
-    async function loadCourse() {
+    async function loadData() {
       // CRITICAL: Validate courseId exists
       if (!courseId || courseId === 'undefined' || courseId === 'null') {
         setError('No course selected. Please select a course first.')
@@ -47,9 +49,14 @@ export default function CreateCourseAssignmentPage() {
       } else {
         setError(result.error || 'Course not found')
       }
+
+      // Fetch default submission cost
+      const cost = await getDefaultSubmissionCost()
+      setDefaultSubmissionCost(cost)
+
       setLoading(false)
     }
-    loadCourse()
+    loadData()
   }, [courseId])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -86,6 +93,7 @@ export default function CreateCourseAssignmentPage() {
         : 0,
       allowedFileTypes: ['pdf', 'docx', 'doc', 'txt', 'jpg', 'png', 'jpeg'],
       maxFileSizeMb: parseInt(formData.get('maxFileSizeMb') as string),
+      submissionCost: defaultSubmissionCost, // Auto-set from admin settings
       aiGradingEnabled,
       aiRubric: aiGradingEnabled ? aiRubric : null,
       plagiarismCheckEnabled,
@@ -277,6 +285,8 @@ export default function CreateCourseAssignmentPage() {
                   </div>
                 </div>
 
+
+
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
                     <strong>📊 CA Calculation:</strong> Student scores will be converted proportionally to the allocated CA marks.
@@ -297,6 +307,12 @@ export default function CreateCourseAssignmentPage() {
                     type="datetime-local"
                     required
                   />
+                </div>
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    <strong>💳 Submission Cost:</strong> Students will be charged <strong>₦{defaultSubmissionCost.toLocaleString()}</strong> to submit this assignment. This is the default rate set by administrators.
+                  </p>
                 </div>
 
                 <div className="flex items-center space-x-2">

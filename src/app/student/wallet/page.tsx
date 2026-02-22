@@ -32,6 +32,8 @@ interface Payment {
   status: string
   created_at: string
   description: string
+  type?: 'debit' | 'credit'
+  purpose?: string
 }
 
 /**
@@ -174,7 +176,7 @@ export default function StudentWalletPage() {
         {/* Quick Actions */}
         <div className="grid md:grid-cols-2 gap-4 mb-8">
           <Card className="p-4 border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-            <Link href="/student/assignments" className="flex items-start gap-4">
+            <Link href="/student/assignments/access" className="flex items-start gap-4">
               <div className="p-3 bg-blue-50 rounded-lg">
                 <Wallet className="w-5 h-5 text-blue-600" />
               </div>
@@ -247,36 +249,54 @@ export default function StudentWalletPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {payments.map((payment) => (
-                        <tr key={payment.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(payment.created_at).toLocaleDateString('en-NG', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                            +₦{payment.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                payment.status === 'completed'
-                                  ? 'bg-green-100 text-green-800'
-                                  : payment.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {payment.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
-                            {payment.reference}
-                          </td>
-                        </tr>
-                      ))}
+                      {payments.map((payment) => {
+                        // Determine if it's a credit or debit
+                        const isCredit = payment.type === 'credit'
+                        const isPayment = payment.purpose === 'payment'
+                        const isSubmission = payment.purpose === 'payment' || payment.purpose === 'ai_assignment'
+                        
+                        return (
+                          <tr key={payment.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Date(payment.created_at).toLocaleDateString('en-NG', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+                                  {isCredit ? '+' : '-'}₦{Number(payment.amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                                </span>
+                                {isSubmission && (
+                                  <span className="text-xs text-gray-500">
+                                    ({payment.purpose === 'ai_assignment' ? 'AI Writer' : 'Submission'})
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  payment.status === 'completed'
+                                    ? 'bg-green-100 text-green-800'
+                                    : payment.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {payment.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500">
+                              <div className="max-w-xs truncate">
+                                {payment.description || payment.reference || 'N/A'}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

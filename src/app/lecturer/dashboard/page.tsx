@@ -2,9 +2,11 @@
 // SERVER COMPONENT - No 'use client' directive
 
 import { redirect } from 'next/navigation'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/actions/auth.actions'
 import { getLecturerCourses } from '@/lib/actions/course.actions'
 import { getLecturerStandaloneAssignments } from '@/lib/actions/standalone-assignment.actions'
+import { getWalletSummary } from '@/lib/actions/wallet.actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +32,41 @@ export default async function LecturerDashboard() {
   // Get standalone assignments count
   const { assignments } = await getLecturerStandaloneAssignments()
   const standaloneCount = assignments?.length || 0
+
+  // Get wallet/earnings summary
+  const walletResult = await getWalletSummary(user.id)
+  const totalEarnings = walletResult.success && walletResult.summary ? walletResult.summary.totalEarned : 0
+
+  // Get submission counts
+  const adminClient = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+
+  const { count: totalSubmissions } = await adminClient
+    .from('assignment_submissions')
+    .select('*', { count: 'exact', head: true })
+    .in('assignment_id', (await adminClient
+      .from('assignments')
+      .select('id')
+      .eq('created_by', user.id)).data?.map(a => a.id) || [])
+    .eq('status', 'submitted')
+
+  const { count: pendingGrading } = await adminClient
+    .from('assignment_submissions')
+    .select('*', { count: 'exact', head: true })
+    .in('assignment_id', (await adminClient
+      .from('assignments')
+      .select('id')
+      .eq('created_by', user.id)).data?.map(a => a.id) || [])
+    .eq('status', 'submitted')
+    .is('final_score', null)
 
   const displayName = user.profile.title
     ? `${user.profile.title} ${user.profile.last_name}`
@@ -86,7 +123,7 @@ export default async function LecturerDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">0</p>
+              <p className="text-3xl font-bold">{totalSubmissions || 0}</p>
             </CardContent>
           </Card>
 
@@ -97,7 +134,7 @@ export default async function LecturerDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-orange-600">0</p>
+              <p className="text-3xl font-bold text-orange-600">{pendingGrading || 0}</p>
             </CardContent>
           </Card>
 
@@ -108,7 +145,7 @@ export default async function LecturerDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-green-600">₦0.00</p>
+              <p className="text-3xl font-bold text-green-600">₦{totalEarnings.toLocaleString()}</p>
             </CardContent>
           </Card>
         </div>

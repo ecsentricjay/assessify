@@ -6,19 +6,21 @@ import PricingSettingsForm from '@/components/admin/pricing-settings-form'
 export default async function AdminSettingsPage() {
   // In a real app, fetch current settings from database
   const currentSettings = {
-    platformFeePercentage: 27,
-    lecturerPercentage: 50,
+    platformFeePercentage: 50,
+    lecturerPercentage: 35,
     partnerPercentage: 15,
-    platformPercentage: 35,
+    platformPercentage: 50,
     defaultCommissionRate: 15,
     systemNotes: '',
   }
 
   const pricingSettings = {
-    assignmentWriterBase: 200, // ₦200 for 1-1000 words
+    assignmentWriterBase: 100, // ₦100 for 1-1000 words
     assignmentWriterPerBracket: 100, // ₦100 per additional 1-1000 words
-    assignmentSubmissionBase: 100, // Default: lecturer sets this
+    assignmentSubmissionBase: 200, // ₦200 for 1-1000 words submission
+    assignmentSubmissionPerBracket: 100, // ₦100 per additional 1-1000 words
     testSubmissionBase: 50, // Default flat rate for tests
+    defaultSubmissionCost: 200, // Default cost per assignment submission
   }
 
   return (
@@ -46,15 +48,15 @@ export default async function AdminSettingsPage() {
               <div className="space-y-1 text-sm text-blue-800">
                 <div className="flex justify-between">
                   <span>Lecturer:</span>
-                  <span className="font-semibold">{currentSettings.lecturerPercentage}% (₦100)</span>
+                  <span className="font-semibold">{currentSettings.lecturerPercentage}% (₦35)</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Partner:</span>
-                  <span className="font-semibold">{currentSettings.partnerPercentage}% (₦30)</span>
+                  <span className="font-semibold">{currentSettings.partnerPercentage}% (₦15)</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Platform:</span>
-                  <span className="font-semibold">{currentSettings.platformPercentage}% (₦70)</span>
+                  <span className="font-semibold">{currentSettings.platformPercentage}% (₦50)</span>
                 </div>
               </div>
             </div>
@@ -64,11 +66,11 @@ export default async function AdminSettingsPage() {
               <div className="space-y-1 text-sm text-gray-700">
                 <div className="flex justify-between">
                   <span>Lecturer:</span>
-                  <span className="font-semibold">50% (₦100)</span>
+                  <span className="font-semibold">35% (₦35)</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Platform:</span>
-                  <span className="font-semibold">50% (₦100)</span>
+                  <span className="font-semibold">65% (₦65)</span>
                 </div>
               </div>
             </div>
@@ -111,7 +113,8 @@ export default async function AdminSettingsPage() {
               <li>Changing fees will affect all future submissions</li>
               <li>Existing transactions are not affected by fee changes</li>
               <li>Commission rate changes apply to new partner earnings only</li>
-              <li>Assignment Writer: ₦200 for 1-1000 words, then +₦100 per bracket</li>
+              <li>Assignment Writer: ₦100 for 1-1000 words, then +₦100 per bracket</li>
+              <li>Assignment Submission: ₦200 for 1-1000 words, then +₦100 per bracket</li>
               <li>Always test changes in a staging environment first</li>
               <li>Ensure total percentages add up correctly (Lecturer + Partner + Platform = 100%)</li>
             </ul>

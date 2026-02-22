@@ -1,10 +1,25 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentUser } from './auth.actions'
 import { revalidatePath } from 'next/cache'
 import type { AttemptWithDetails, SubmitAnswerData } from '@/lib/types/test.types'
 import { processSubmissionPayment } from './transaction.actions'
+
+// Create service client for admin operations
+function createServiceClient() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+}
 
 /**
  * Start a new test attempt
@@ -18,6 +33,7 @@ export async function startTestAttempt(testId: string) {
     }
 
     const supabase = await createClient()
+    const adminClient = createServiceClient()
 
     // Get test details
     const { data: test, error: testError } = await supabase
@@ -82,7 +98,6 @@ export async function startTestAttempt(testId: string) {
     }
 
     // Check wallet balance if test has cost
-    let paymentProcessed = false
     if (test.access_cost > 0) {
       const { data: wallet } = await supabase
         .from('wallets')
@@ -90,38 +105,18 @@ export async function startTestAttempt(testId: string) {
         .eq('user_id', user.id)
         .single()
 
-      if (!wallet || wallet.balance < test.access_cost) {
+      if (!wallet || Number(wallet.balance) < test.access_cost) {
         return { 
           error: 'Insufficient wallet balance',
           requiredAmount: test.access_cost,
           currentBalance: wallet?.balance || 0
         }
       }
-
-      // Process payment for test access
-      const paymentResult = await processSubmissionPayment({
-        studentId: user.id,
-        lecturerId: test.created_by,
-        submissionAmount: test.access_cost,
-        sourceType: 'test_submission',
-        sourceId: test.id,
-        submissionId: '', // Will be populated with attempt ID after creation
-        purpose: `Test access: ${test.title}`
-      })
-
-      if (!paymentResult.success) {
-        return { 
-          error: paymentResult.error || 'Failed to process test access payment',
-          requiresPayment: true
-        }
-      }
-
-      paymentProcessed = true
     }
 
-    // Create attempt
+    // Create attempt FIRST (without payment_processed column)
     const attemptNumber = attemptsCount + 1
-    const { data: attempt, error: attemptError } = await supabase
+    const { data: attempt, error: attemptError } = await adminClient
       .from('test_attempts')
       .insert({
         test_id: testId,
@@ -129,7 +124,6 @@ export async function startTestAttempt(testId: string) {
         attempt_number: attemptNumber,
         status: 'in_progress',
         started_at: now.toISOString(),
-        payment_processed: paymentProcessed,
       })
       .select()
       .single()
@@ -139,11 +133,44 @@ export async function startTestAttempt(testId: string) {
       return { error: 'Failed to start test' }
     }
 
+    console.log('✅ Test attempt created:', attempt.id)
+
+    // Process payment AFTER creating attempt (so we have the attempt ID)
+    if (test.access_cost > 0) {
+      console.log('💳 Processing test payment...')
+      
+      const paymentResult = await processSubmissionPayment({
+        studentId: user.id,
+        lecturerId: test.created_by,
+        submissionAmount: test.access_cost,
+        sourceType: 'test_submission',
+        sourceId: test.id,
+        submissionId: attempt.id, // ✅ Now we have the attempt ID
+        purpose: `Test access: ${test.title}`
+      })
+
+      if (!paymentResult.success) {
+        console.error('❌ Payment failed:', paymentResult.error)
+        // Delete the attempt since payment failed
+        await adminClient
+          .from('test_attempts')
+          .delete()
+          .eq('id', attempt.id)
+        
+        return { 
+          error: paymentResult.error || 'Failed to process test access payment',
+          requiresPayment: true
+        }
+      }
+
+      console.log('✅ Test payment processed successfully')
+    }
+
     revalidatePath('/student/tests')
     return { 
       attempt, 
       attemptId: attempt.id,
-      paymentProcessed
+      paymentProcessed: test.access_cost > 0
     }
   } catch (error) {
     console.error('Error in startTestAttempt:', error)
@@ -228,7 +255,6 @@ export async function saveAnswer(data: SubmitAnswerData) {
 
 /**
  * Submit test attempt and auto-grade
- * Auto-grades MCQ and True/False, leaves essays ungraded for manual/AI grading
  */
 export async function submitTestAttempt(attemptId: string) {
   try {
@@ -287,13 +313,12 @@ export async function submitTestAttempt(attemptId: string) {
 
     let totalScore = 0
 
-    // Auto-grade MCQ and True/False questions, leave essays ungraded
+    // Auto-grade MCQ and True/False questions
     if (answers) {
       for (const answer of answers) {
         const question = answer.question
 
         if (question.question_type === 'mcq' || question.question_type === 'true_false') {
-          // AUTO-GRADE: MCQ and True/False
           const correctOptionIds = question.options
             .filter((opt: any) => opt.is_correct)
             .map((opt: any) => opt.id)
@@ -305,7 +330,6 @@ export async function submitTestAttempt(attemptId: string) {
 
           const marksAwarded = isCorrect ? question.marks : 0
 
-          // Update answer with grading
           await supabase
             .from('student_answers')
             .update({
@@ -316,13 +340,11 @@ export async function submitTestAttempt(attemptId: string) {
 
           totalScore += marksAwarded
         } else if (question.question_type === 'essay') {
-          // LEAVE ESSAYS UNGRADED (NULL)
           console.log(`Essay question ${question.id} left ungraded for manual/AI grading`)
         }
       }
     }
 
-    // Calculate percentage based on auto-graded questions only
     const testArray = attempt.test as unknown as any[] | null
     const testData = testArray?.[0]
     const totalMarks = testData?.total_marks || 100
@@ -385,7 +407,6 @@ export async function recalculateAttemptScore(attemptId: string) {
 
     const supabase = await createClient()
 
-    // Get all graded answers
     const { data: answers } = await supabase
       .from('student_answers')
       .select('marks_awarded')
@@ -395,13 +416,11 @@ export async function recalculateAttemptScore(attemptId: string) {
       return { error: 'No answers found' }
     }
 
-    // Calculate total score
     const totalScore = answers.reduce(
       (sum, answer) => sum + (answer.marks_awarded || 0),
       0
     )
 
-    // Get test details
     const { data: attempt } = await supabase
       .from('test_attempts')
       .select(`
@@ -422,7 +441,6 @@ export async function recalculateAttemptScore(attemptId: string) {
     const percentage = (totalScore / totalMarks) * 100
     const passed = percentage >= passMarkPercentage
 
-    // Update attempt with new totals
     const { error: updateError } = await supabase
       .from('test_attempts')
       .update({
@@ -438,7 +456,6 @@ export async function recalculateAttemptScore(attemptId: string) {
       return { error: 'Failed to recalculate score' }
     }
 
-    // Update CA records if course-based test
     if (testData?.course_id) {
       await updateCARecordsForTest(
         testData.course_id,
@@ -468,7 +485,6 @@ async function updateCARecordsForTest(
   try {
     const supabase = await createClient()
 
-    // Get or create CA record
     const { data: caRecord } = await supabase
       .from('ca_records')
       .select('*')
@@ -477,11 +493,8 @@ async function updateCARecordsForTest(
       .single()
 
     const testScores = caRecord?.test_scores || {}
-    
-    // Calculate CA contribution
     const caContribution = (score / 100) * allocatedMarks
 
-    // Update test scores
     testScores[`test_${Date.now()}`] = {
       score,
       allocated_marks: allocatedMarks,
@@ -574,6 +587,7 @@ export async function getStudentAttempts(testId?: string) {
 
 /**
  * Get all attempts for a test (lecturer view)
+ * ✅ FIXED: Removed profiles.email (email is in auth.users, not profiles)
  */
 export async function getTestAttempts(testId: string) {
   try {
@@ -583,6 +597,7 @@ export async function getTestAttempts(testId: string) {
     }
 
     const supabase = await createClient()
+    const adminClient = createServiceClient()
 
     // Verify test ownership
     const { data: test } = await supabase
@@ -611,12 +626,27 @@ export async function getTestAttempts(testId: string) {
       return { attempts: [] }
     }
 
-    // Get student profiles
+    // Get student profiles (WITHOUT email - email is in auth.users)
     const studentIds = [...new Set(attempts.map(a => a.student_id))]
     const { data: students } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, matric_number, email, level, department')
+      .select('id, first_name, last_name, matric_number, level, department') // ✅ REMOVED email
       .in('id', studentIds)
+
+    // Get student emails from auth.users using admin client
+    const studentsWithEmail = await Promise.all(
+      (students || []).map(async (student) => {
+        try {
+          const { data: authUser } = await adminClient.auth.admin.getUserById(student.id)
+          return {
+            ...student,
+            email: authUser?.user?.email || ''
+          }
+        } catch {
+          return { ...student, email: '' }
+        }
+      })
+    )
 
     // Get test details
     const { data: testDetails } = await supabase
@@ -627,7 +657,7 @@ export async function getTestAttempts(testId: string) {
 
     // Combine the data
     const attemptsWithDetails = attempts.map(attempt => {
-      const student = students?.find(s => s.id === attempt.student_id)
+      const student = studentsWithEmail?.find(s => s.id === attempt.student_id)
       return {
         ...attempt,
         student,
@@ -640,7 +670,7 @@ export async function getTestAttempts(testId: string) {
       total_attempts: attempts.length,
       completed: attempts.filter(a => a.status === 'completed').length,
       in_progress: attempts.filter(a => a.status === 'in_progress').length,
-      total_payment_processed: (attempts.filter(a => a.payment_processed).length * (testDetails?.access_cost || 0))
+      total_payment_collected: attempts.filter(a => a.status === 'completed').length * (testDetails?.access_cost || 0)
     }
 
     return { attempts: attemptsWithDetails, stats }
@@ -652,6 +682,7 @@ export async function getTestAttempts(testId: string) {
 
 /**
  * Get detailed attempt with all answers
+ * ✅ FIXED: Removed profiles.email (email is in auth.users, not profiles)
  */
 export async function getAttemptDetails(attemptId: string) {
   try {
@@ -661,6 +692,7 @@ export async function getAttemptDetails(attemptId: string) {
     }
 
     const supabase = await createClient()
+    const adminClient = createServiceClient()
 
     // Get the attempt
     const { data: attempt, error: attemptError } = await supabase
@@ -692,16 +724,31 @@ export async function getAttemptDetails(attemptId: string) {
       return { error: 'Test not found' }
     }
 
-    // Get student details
-    const { data: student, error: studentError } = await supabase
+    // Get student profile (WITHOUT email) ✅ FIXED
+    const { data: studentProfile, error: studentError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, matric_number, email, level, department')
+      .select('id, first_name, last_name, matric_number, level, department') // ✅ REMOVED email
       .eq('id', attempt.student_id)
       .single()
 
     if (studentError) {
       console.error('Error fetching student:', studentError)
     }
+
+    // Get student email from auth.users using admin client ✅ FIXED
+    let studentEmail = ''
+    try {
+      const { data: authUser } = await adminClient.auth.admin.getUserById(attempt.student_id)
+      studentEmail = authUser?.user?.email || ''
+    } catch (emailError) {
+      console.error('Error fetching student email:', emailError)
+    }
+
+    // Combine student data with email
+    const student = studentProfile ? {
+      ...studentProfile,
+      email: studentEmail
+    } : null
 
     // Get course details if course-based
     let course = null
@@ -711,7 +758,6 @@ export async function getAttemptDetails(attemptId: string) {
         .select('id, course_code, course_title')
         .eq('id', test.course_id)
         .single()
-      
       course = courseData
     }
 
@@ -749,7 +795,6 @@ export async function getAttemptDetails(attemptId: string) {
             .select('*')
             .eq('question_id', question.id)
             .order('order_index', { ascending: true })
-          
           options = optionsData || []
         }
 

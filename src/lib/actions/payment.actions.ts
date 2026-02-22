@@ -478,8 +478,13 @@ export async function getOrCreateWallet(
   }
 }
 
+// lib/actions/payment.actions.ts
+
 /**
- * Get payment history for user
+ * Get payment history for user (ALL transactions, not just wallet funding)
+ */
+/**
+ * Get payment history for user - ALL transactions
  */
 export async function getPaymentHistory(limit = 10) {
   try {
@@ -494,26 +499,31 @@ export async function getPaymentHistory(limit = 10) {
 
     const supabase = await createClient()
 
+    // Get user's wallet first
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!wallet) {
+      return {
+        success: false,
+        error: 'Wallet not found',
+        payments: [],
+      }
+    }
+
+    // Get ALL transactions (removed purpose filter entirely)
     const { data, error } = await supabase
       .from('transactions')
-      .select(
-        `
-        id,
-        reference,
-        amount,
-        status,
-        created_at,
-        description,
-        wallets(user_id)
-      `
-      )
-      .eq('wallets.user_id', user.id)
-      .eq('type', 'credit')
-      .eq('purpose', 'payment')
+      .select('*')
+      .eq('wallet_id', wallet.id)
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (error) {
+      console.error('Transaction history error:', error)
       return {
         success: false,
         error: error.message,
@@ -521,12 +531,15 @@ export async function getPaymentHistory(limit = 10) {
       }
     }
 
+    console.log('✅ Transaction history fetched:', data?.length, 'transactions')
+
     return {
       success: true,
       payments: data || [],
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Get payment history error:', message)
     return {
       success: false,
       error: message,

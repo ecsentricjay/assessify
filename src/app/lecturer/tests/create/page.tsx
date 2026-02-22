@@ -1,7 +1,7 @@
 // app/lecturer/tests/create/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { createStandaloneTest } from '@/lib/actions/test.actions'
+import { getDefaultTestCost } from '@/lib/actions/settings.actions'
 import { ArrowLeft, Plus, Trash2, Save } from 'lucide-react'
 import Link from 'next/link'
 import type { CreateQuestionData } from '@/lib/types/test.types'
@@ -32,7 +33,7 @@ export default function CreateStandaloneTestPage() {
   const [endTime, setEndTime] = useState('')
   const [passmark, setPassmark] = useState(40)
   const [maxAttempts, setMaxAttempts] = useState(1)
-  const [accessCost, setAccessCost] = useState(0)
+  const [accessCost, setAccessCost] = useState(50) // ✅ Will be loaded from admin settings
   const [shuffleQuestions, setShuffleQuestions] = useState(true)
   const [shuffleOptions, setShuffleOptions] = useState(true)
   const [showResultsImmediately, setShowResultsImmediately] = useState(false)
@@ -45,6 +46,16 @@ export default function CreateStandaloneTestPage() {
   // Questions state
   const [questions, setQuestions] = useState<CreateQuestionData[]>([])
   const [currentStep, setCurrentStep] = useState<'config' | 'questions'>('config')
+
+  // ✅ Load default test cost from admin settings
+  useEffect(() => {
+    async function loadSettings() {
+      const defaultCost = await getDefaultTestCost()
+      setAccessCost(defaultCost)
+      console.log('💰 Loaded default test cost:', defaultCost)
+    }
+    loadSettings()
+  }, [])
 
   const handleCreateTest = async () => {
     try {
@@ -74,6 +85,8 @@ export default function CreateStandaloneTestPage() {
         return
       }
 
+      console.log('📝 Creating test with access cost:', accessCost) // Debug log
+
       // Create test
       const result = await createStandaloneTest({
         title: title.trim(),
@@ -87,7 +100,7 @@ export default function CreateStandaloneTestPage() {
         end_time: endTime,
         pass_mark: passmark,
         max_attempts: maxAttempts,
-        access_cost: accessCost,
+        access_cost: accessCost, // ✅ This was already here
         shuffle_questions: shuffleQuestions,
         shuffle_options: shuffleOptions,
         show_results_immediately: showResultsImmediately,
@@ -334,6 +347,13 @@ export default function CreateStandaloneTestPage() {
                   min="1"
                 />
                 <p className="text-xs text-gray-500 mt-1">Number of times a student can take this test</p>
+              </div>
+
+              {/* ✅ Access cost is set by admin (₦50 default) */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <strong>💳 Test Access Cost:</strong> Students will be charged <strong>₦{accessCost}</strong> to take this test. This is the default rate set by administrators.
+                </p>
               </div>
             </CardContent>
           </Card>

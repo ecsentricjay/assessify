@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from './auth.actions'
+import { processSubmissionPayment } from './transaction.actions'
+import { sendAssignmentSubmittedEmail } from './email.actions'
 
 function createServiceClient() {
   return createAdminClient(
@@ -20,7 +22,7 @@ function createServiceClient() {
 
 // Generate unique access code
 function generateAccessCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Removed confusing chars like 0, O, I, 1
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let i = 0; i < 8; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length))
@@ -48,8 +50,21 @@ export async function createStandaloneAssignment(formData: {
 }) {
   const user = await getCurrentUser()
 
-  if (!user || user.profile?.role !== 'lecturer') {
-    return { error: 'Unauthorized' }
+  console.log('=== Assignment Creation ===')
+  console.log('User:', user?.id)
+  console.log('Profile:', user?.profile)
+  console.log('Role:', user?.profile?.role)
+
+  if (!user) {
+    return { success: false, error: 'Unauthorized access: Not authenticated' }
+  }
+
+  if (!user.profile) {
+    return { success: false, error: 'Unauthorized access: Profile not found' }
+  }
+
+  if (user.profile.role !== 'lecturer') {
+    return { success: false, error: `Unauthorized access: You are a ${user.profile.role}, only lecturers can create assignments` }
   }
 
   const adminClient = createServiceClient()
@@ -59,7 +74,6 @@ export async function createStandaloneAssignment(formData: {
   let codeExists = true
   let attempts = 0
 
-  // Ensure unique code
   while (codeExists && attempts < 10) {
     const { data: existing } = await adminClient
       .from('assignments')
@@ -76,10 +90,10 @@ export async function createStandaloneAssignment(formData: {
   }
 
   if (codeExists) {
-    return { error: 'Failed to generate unique access code. Please try again.' }
+    return { success: false, error: 'Failed to generate unique access code. Please try again.' }
   }
 
-  // Create standalone assignment (no course_id required)
+  // Create standalone assignment
   const { data: assignment, error } = await adminClient
     .from('assignments')
     .insert({
@@ -93,7 +107,7 @@ export async function createStandaloneAssignment(formData: {
       instructions: formData.instructions,
       assignment_type: formData.assignmentType,
       max_score: formData.maxScore,
-      allocated_marks: formData.maxScore, // For standalone, allocated marks = max score
+      allocated_marks: formData.maxScore,
       deadline: formData.deadline,
       late_submission_allowed: formData.lateSubmissionAllowed,
       late_penalty_percentage: formData.latePenaltyPercentage,
@@ -103,14 +117,14 @@ export async function createStandaloneAssignment(formData: {
       ai_grading_enabled: formData.aiGradingEnabled,
       ai_grading_rubric: formData.aiRubric || null,
       plagiarism_check_enabled: formData.plagiarismCheckEnabled,
-      is_published: true, // Auto-publish standalone assignments
+      is_published: true,
     })
     .select()
     .single()
 
   if (error) {
     console.error('Standalone assignment creation error:', error)
-    return { error: error.message }
+    return { success: false, error: error.message }
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -127,15 +141,6 @@ export async function createStandaloneAssignment(formData: {
 
 export async function getStandaloneAssignmentByCode(accessCode: string) {
   const supabase = await createClient()
-  console.log('🔍 Looking for assignment with code:', accessCode.toUpperCase())
-
-  // First, let's check if ANY standalone assignments exist
-  const { data: allStandalone, error: allError } = await supabase
-    .from('assignments')
-    .select('access_code, title, is_standalone, is_published')
-    .eq('is_standalone', true)
-
-  console.log('📋 All standalone assignments:', allStandalone, allError)
 
   const { data: assignment, error } = await supabase
     .from('assignments')
@@ -152,34 +157,15 @@ export async function getStandaloneAssignmentByCode(accessCode: string) {
     .eq('is_published', true)
     .single()
 
-  console.log('📊 Query result:', { assignment, error })
-  console.log('🔑 Full error details:', JSON.stringify(error, null, 2))
-
-  if (error) {
-    console.error('❌ Database error:', error)
-    
-    // Check if it's a "no rows" error vs actual error
-    if (error.code === 'PGRST116') {
-      console.log('ℹ️ No matching assignment found - likely wrong code or filters')
-    }
-    
+  if (error || !assignment) {
     return { error: 'Assignment not found or access code is invalid' }
   }
-
-  if (!assignment) {
-    console.log('❌ No assignment found')
-    return { error: 'Assignment not found or access code is invalid' }
-  }
-
-  console.log('✅ Assignment found:', assignment.title, assignment.id)
 
   // Get submission count
-  const { count, error: countError } = await supabase
+  const { count } = await supabase
     .from('assignment_submissions')
     .select('*', { count: 'exact', head: true })
     .eq('assignment_id', assignment.id)
-
-  console.log('📈 Submission count:', count, countError)
 
   return { 
     assignment: {
@@ -194,14 +180,17 @@ export async function submitStandaloneAssignment(formData: {
   submissionText?: string
   fileUrls: string[]
 }) {
-  const supabase = await createClient()
-  const adminClient = createServiceClient()
   const user = await getCurrentUser()
 
-  // MUST be logged in as student
   if (!user || user.profile?.role !== 'student') {
     return { error: 'You must be logged in as a student to submit assignments' }
   }
+
+  const supabase = await createClient()
+
+  console.log('🎯 === STANDALONE SUBMISSION START ===')
+  console.log('Assignment ID:', formData.assignmentId)
+  console.log('Student ID:', user.id)
 
   // Get assignment details
   const { data: assignment, error: assignmentError } = await supabase
@@ -212,8 +201,12 @@ export async function submitStandaloneAssignment(formData: {
     .single()
 
   if (assignmentError || !assignment) {
+    console.error('❌ Assignment not found:', assignmentError)
     return { error: 'Assignment not found' }
   }
+
+  console.log('✅ Assignment found:', assignment.title)
+  console.log('💰 Submission cost:', assignment.submission_cost)
 
   // Check deadline
   const deadline = new Date(assignment.deadline)
@@ -225,7 +218,7 @@ export async function submitStandaloneAssignment(formData: {
     return { error: 'The deadline for this assignment has passed' }
   }
 
-  // Check for existing submission by this student
+  // Check for existing submission
   const { data: existingSubmission } = await supabase
     .from('assignment_submissions')
     .select('id')
@@ -237,97 +230,176 @@ export async function submitStandaloneAssignment(formData: {
     return { error: 'You have already submitted this assignment' }
   }
 
-  // Handle payment if needed
-  if (assignment.submission_cost > 0) {
+  // Get submission cost from assignment, or use default
+  const { getDefaultSubmissionCost } = await import('./settings.actions')
+  const assignmentCost = Number(assignment.submission_cost) || null
+  const submissionCost = assignmentCost !== null && assignmentCost > 0 ? assignmentCost : await getDefaultSubmissionCost()
+  console.log('📊 Parsed submission cost:', submissionCost, '(from assignment:', assignmentCost, ')')
+
+  // Check wallet balance BEFORE creating submission
+  if (submissionCost > 0) {
     const { data: wallet } = await supabase
       .from('wallets')
-      .select('id, balance')
+      .select('balance')
       .eq('user_id', user.id)
       .single()
 
-    if (!wallet) {
-      return { error: 'Wallet not found' }
+    console.log('💵 Student wallet balance:', wallet?.balance)
+
+    if (!wallet || Number(wallet.balance) < submissionCost) {
+      console.error('❌ Insufficient balance')
+      return { 
+        error: `Insufficient wallet balance. Required: ₦${submissionCost}, Available: ₦${wallet?.balance || 0}`,
+        requiresPayment: true
+      }
     }
-
-    if (wallet.balance < assignment.submission_cost) {
-      return { error: `Insufficient balance. You need ₦${assignment.submission_cost} to submit.` }
-    }
-
-    // Deduct from wallet
-    const { data: currentWallet } = await adminClient
-      .from('wallets')
-      .select('total_spent')
-      .eq('id', wallet.id)
-      .single()
-
-    const newBalance = wallet.balance - assignment.submission_cost
-    const newTotalSpent = (currentWallet?.total_spent || 0) + assignment.submission_cost
-
-    await adminClient
-      .from('wallets')
-      .update({
-        balance: newBalance,
-        total_spent: newTotalSpent,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', wallet.id)
-
-    // Create transaction
-    const transactionRef = `STANDALONE-${Date.now()}-${user.id.slice(0, 8)}`
-    await adminClient.from('transactions').insert({
-      wallet_id: wallet.id,
-      type: 'debit',
-      purpose: 'assignment_submission',
-      amount: assignment.submission_cost,
-      balance_before: wallet.balance,
-      balance_after: newBalance,
-      reference: transactionRef,
-      description: `Standalone assignment: ${assignment.title}`,
-      status: 'completed'
-    })
-
-    // Credit lecturer
-    const lecturerShare = assignment.submission_cost * 0.7
-    await adminClient.from('lecturer_earnings').insert({
-      lecturer_id: assignment.created_by,
-      amount: lecturerShare,
-      source_type: 'assignment',
-      source_id: assignment.id,
-      revenue_share_percentage: 70,
-      withdrawn: false
-    })
   }
 
-  // Create submission with student details
-  const { data: submission, error: submissionError } = await adminClient
+  // Create submission first
+  console.log('📝 Creating submission record...')
+  const { data: submission, error: submissionError } = await supabase
     .from('assignment_submissions')
     .insert({
       assignment_id: formData.assignmentId,
       student_id: user.id,
-      student_name: `${user.profile.first_name} ${user.profile.last_name}`,
+      student_name: `${user.profile?.first_name} ${user.profile?.last_name}`,
       student_email: user.email,
       submission_text: formData.submissionText,
       file_urls: formData.fileUrls,
       is_late: isLate,
       late_days: lateDays,
-      status: 'submitted',
+      status: submissionCost > 0 ? 'payment_pending' : 'submitted',
       submitted_at: new Date().toISOString()
     })
     .select()
     .single()
 
-  if (submissionError) {
-    console.error('Submission error:', submissionError)
+  if (submissionError || !submission) {
+    console.error('❌ Submission creation error:', submissionError)
     return { error: 'Failed to submit assignment' }
   }
 
+  console.log('✅ Submission created:', submission.id)
+
+  // Process payment if submission cost > 0
+  if (submissionCost > 0) {
+    console.log('💳 Processing payment...')
+    console.log('Payment details:', {
+      studentId: user.id,
+      lecturerId: assignment.created_by,
+      amount: submissionCost,
+      submissionId: submission.id
+    })
+    
+    const paymentResult = await processSubmissionPayment({
+      studentId: user.id,
+      lecturerId: assignment.created_by,
+      submissionAmount: submissionCost,
+      sourceType: 'assignment_submission',
+      sourceId: assignment.id,
+      submissionId: submission.id,
+      purpose: `Standalone assignment: ${assignment.title}`
+    })
+
+    console.log('💳 Payment result:', paymentResult)
+
+    if (!paymentResult.success) {
+      console.error('❌ Payment failed:', paymentResult.error)
+      return { 
+        error: paymentResult.error || 'Payment processing failed',
+        submissionId: submission.id,
+        requiresPayment: true
+      }
+    }
+
+    // Update submission status to submitted after successful payment
+    console.log('✅ Payment successful, updating submission status...')
+    await supabase
+      .from('assignment_submissions')
+      .update({ status: 'submitted' })
+      .eq('id', submission.id)
+
+    console.log('✅ Payment processed successfully')
+  } else {
+    console.log('ℹ️ No payment required (cost is 0)')
+  }
+
+  // Send email notification
+  try {
+    await sendAssignmentSubmittedEmail(
+      user.email || '',
+      user.profile?.first_name || 'Student',
+      assignment.display_course_title || 'Course',
+      assignment.title,
+      new Date().toLocaleDateString(),
+      submission.id
+    )
+  } catch (emailError) {
+    console.error('⚠️ Email notification failed:', emailError)
+  }
+
+  revalidatePath('/student/assignments')
+  
+  console.log('🎯 === STANDALONE SUBMISSION COMPLETE ===')
+  
   return { 
     success: true, 
     message: isLate 
       ? `Assignment submitted successfully! Note: ${lateDays} day(s) late.`
       : 'Assignment submitted successfully!',
-    submission 
+    submission,
+    paymentProcessed: submissionCost > 0
   }
+}
+
+export async function retryStandaloneSubmissionPayment(submissionId: string) {
+  const user = await getCurrentUser()
+  if (!user || user.profile?.role !== 'student') {
+    return { error: 'Unauthorized' }
+  }
+
+  const supabase = await createClient()
+
+  const { data: submission } = await supabase
+    .from('assignment_submissions')
+    .select('*, assignments(*)')
+    .eq('id', submissionId)
+    .eq('student_id', user.id)
+    .single()
+
+  if (!submission) {
+    return { error: 'Submission not found' }
+  }
+
+  const assignment = submission.assignments
+
+  const { getDefaultSubmissionCost } = await import('./settings.actions')
+  const assignmentCost = Number(assignment.submission_cost) || null
+  const submissionCost = assignmentCost !== null && assignmentCost > 0 ? assignmentCost : await getDefaultSubmissionCost()
+
+  const paymentResult = await processSubmissionPayment({
+    studentId: user.id,
+    lecturerId: assignment.created_by,
+    submissionAmount: submissionCost,
+    sourceType: 'assignment_submission',
+    sourceId: assignment.id,
+    submissionId: submission.id,
+    purpose: `Standalone assignment: ${assignment.title}`
+  })
+
+  if (!paymentResult.success) {
+    return { 
+      error: paymentResult.error || 'Payment processing failed'
+    }
+  }
+
+  await supabase
+    .from('assignment_submissions')
+    .update({ status: 'submitted' })
+    .eq('id', submission.id)
+
+  revalidatePath('/student/assignments')
+  return { success: true, message: 'Payment processed successfully' }
 }
 
 export async function getLecturerStandaloneAssignments() {
@@ -335,7 +407,7 @@ export async function getLecturerStandaloneAssignments() {
   const user = await getCurrentUser()
 
   if (!user || user.profile?.role !== 'lecturer') {
-    return { error: 'Unauthorized' }
+    return { success: false, error: 'Unauthorized access', assignments: [] }
   }
 
   const { data: assignments, error } = await supabase
@@ -353,10 +425,9 @@ export async function getLecturerStandaloneAssignments() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return { error: error.message }
+    return { success: false, error: error.message, assignments: [] }
   }
 
-  // Get submission counts
   const assignmentsWithCounts = await Promise.all(
     (assignments || []).map(async (assignment) => {
       const { count } = await supabase
@@ -364,14 +435,23 @@ export async function getLecturerStandaloneAssignments() {
         .select('*', { count: 'exact', head: true })
         .eq('assignment_id', assignment.id)
 
+      const { data: submissions } = await supabase
+        .from('assignment_submissions')
+        .select('id')
+        .eq('assignment_id', assignment.id)
+        .eq('status', 'submitted')
+
+      const totalRevenue = assignment.submission_cost * (submissions?.length || 0)
+
       return {
         ...assignment,
-        submissionCount: count || 0
+        submissionCount: count || 0,
+        totalRevenue
       }
     })
   )
 
-  return { assignments: assignmentsWithCounts }
+  return { success: true, assignments: assignmentsWithCounts }
 }
 
 export async function getStandaloneAssignmentSubmissions(assignmentId: string) {
@@ -379,10 +459,9 @@ export async function getStandaloneAssignmentSubmissions(assignmentId: string) {
   const user = await getCurrentUser()
 
   if (!user || user.profile?.role !== 'lecturer') {
-    return { error: 'Unauthorized' }
+    return { success: false, error: 'Unauthorized access' }
   }
 
-  // Verify lecturer owns this assignment
   const { data: assignment } = await supabase
     .from('assignments')
     .select('*')
@@ -392,10 +471,9 @@ export async function getStandaloneAssignmentSubmissions(assignmentId: string) {
     .single()
 
   if (!assignment) {
-    return { error: 'Assignment not found' }
+    return { success: false, error: 'Assignment not found or you do not have permission to view it' }
   }
 
-  // Get all submissions
   const { data: submissions, error } = await supabase
     .from('assignment_submissions')
     .select(`
@@ -412,10 +490,18 @@ export async function getStandaloneAssignmentSubmissions(assignmentId: string) {
     .order('submitted_at', { ascending: false })
 
   if (error) {
-    return { error: error.message }
+    return { success: false, error: error.message }
   }
 
-  return { assignment, submissions }
+  const stats = {
+    total: submissions?.length || 0,
+    submitted: submissions?.filter(s => s.status === 'submitted').length || 0,
+    graded: submissions?.filter(s => s.final_score !== null).length || 0,
+    pending_payment: submissions?.filter(s => s.status === 'payment_pending').length || 0,
+    total_revenue: assignment.submission_cost * (submissions?.filter(s => s.status === 'submitted').length || 0)
+  }
+
+  return { success: true, assignment, submissions, stats }
 }
 
 export async function exportStandaloneSubmissions(assignmentId: string, format: 'csv' | 'pdf' = 'csv') {
@@ -455,9 +541,6 @@ export async function exportStandaloneSubmissions(assignmentId: string, format: 
 
   return { error: 'PDF export not yet implemented' }
 }
-// Add this function to: src/lib/actions/standalone-assignment.actions.ts
-
-// Update in: src/lib/actions/standalone-assignment.actions.ts
 
 export async function deleteStandaloneAssignment(
   assignmentId: string, 
@@ -466,13 +549,12 @@ export async function deleteStandaloneAssignment(
   const user = await getCurrentUser()
 
   if (!user || user.profile?.role !== 'lecturer') {
-    return { error: 'Unauthorized' }
+    return { success: false, error: 'Unauthorized access' }
   }
 
   const supabase = await createClient()
   const adminClient = createServiceClient()
 
-  // Verify lecturer owns this assignment and it's standalone
   const { data: assignment } = await supabase
     .from('assignments')
     .select('id, created_by, is_standalone, title')
@@ -481,29 +563,27 @@ export async function deleteStandaloneAssignment(
     .single()
 
   if (!assignment) {
-    return { error: 'Assignment not found' }
+    return { success: false, error: 'Assignment not found' }
   }
 
   if (assignment.created_by !== user.id) {
-    return { error: 'You do not have permission to delete this assignment' }
+    return { success: false, error: 'You do not have permission to delete this assignment' }
   }
 
-  // Check if there are any submissions
   const { count: submissionCount } = await supabase
     .from('assignment_submissions')
     .select('*', { count: 'exact', head: true })
     .eq('assignment_id', assignmentId)
 
-  // If has submissions and not forcing delete, return error with count
   if (submissionCount && submissionCount > 0 && !forceDelete) {
     return { 
+      success: false,
       error: 'HAS_SUBMISSIONS',
       submissionCount,
       message: `This assignment has ${submissionCount} submission(s).`
     }
   }
 
-  // If force delete, first delete all submissions
   if (submissionCount && submissionCount > 0 && forceDelete) {
     const { error: submissionDeleteError } = await adminClient
       .from('assignment_submissions')
@@ -512,13 +592,10 @@ export async function deleteStandaloneAssignment(
 
     if (submissionDeleteError) {
       console.error('Error deleting submissions:', submissionDeleteError)
-      return { error: 'Failed to delete submissions. Please try again.' }
+      return { success: false, error: 'Failed to delete submissions. Please try again.' }
     }
-
-    console.log(`✅ Deleted ${submissionCount} submissions for assignment ${assignmentId}`)
   }
 
-  // Delete the assignment
   const { error: deleteError } = await adminClient
     .from('assignments')
     .delete()
@@ -526,29 +603,12 @@ export async function deleteStandaloneAssignment(
 
   if (deleteError) {
     console.error('Delete error:', deleteError)
-    return { error: 'Failed to delete assignment. Please try again.' }
+    return { success: false, error: 'Failed to delete assignment. Please try again.' }
   }
-
-  // Log the deletion for audit purposes
-  await adminClient
-    .from('audit_logs')
-    .insert({
-      user_id: user.id,
-      action: 'DELETE_STANDALONE_ASSIGNMENT',
-      resource_type: 'assignment',
-      resource_id: assignmentId,
-      details: {
-        title: assignment.title,
-        submissions_deleted: submissionCount || 0,
-        force_delete: forceDelete
-      }
-    })
 
   revalidatePath('/lecturer/assignments/standalone')
   return { 
     success: true, 
-    message: forceDelete && submissionCount
-      ? `Assignment "${assignment.title}" and ${submissionCount} submission(s) deleted successfully!`
-      : `Assignment "${assignment.title}" deleted successfully!`
+    message: `Assignment "${assignment.title}" deleted successfully!`
   }
 }

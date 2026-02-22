@@ -72,7 +72,7 @@ export default async function FinancialReportsPage({
               ₦{financial?.platformEarnings.toLocaleString() || '0'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              30% of revenue
+              50-65% of revenue
             </p>
           </CardContent>
         </Card>
@@ -87,7 +87,7 @@ export default async function FinancialReportsPage({
               ₦{financial?.lecturerEarnings.toLocaleString() || '0'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              70% of revenue
+              35% of revenue
             </p>
           </CardContent>
         </Card>

@@ -7,7 +7,19 @@ export type Partner = Database['public']['Tables']['partners']['Row']
 export type PartnerInsert = Database['public']['Tables']['partners']['Insert']
 export type PartnerUpdate = Database['public']['Tables']['partners']['Update']
 
-export type Referral = Database['public']['Tables']['referrals']['Row']
+type ReferralRow = Database['public']['Tables']['referrals']['Row']
+
+// Referral interface with calculated fields
+export interface Referral extends ReferralRow {
+  // New fields for submission and revenue tracking
+  assignment_submissions?: number | null
+  test_submissions?: number | null
+  assignment_revenue?: number | null
+  test_revenue?: number | null
+  assignment_earnings?: number | null
+  test_earnings?: number | null
+}
+
 export type ReferralInsert = Database['public']['Tables']['referrals']['Insert']
 export type ReferralUpdate = Database['public']['Tables']['referrals']['Update']
 
@@ -37,17 +49,21 @@ export interface PartnerWithStats extends PartnerWithProfile {
 export interface ReferralWithDetails extends Referral {
   lecturer?: {
     id: string
-    full_name: string
-    email: string
-    staff_id?: string
-    department?: string
-    faculty?: string
-  }
+    full_name?: string
+    email?: string
+    first_name?: string
+    last_name?: string
+    staff_id?: string | null
+    department?: string | null
+    faculty?: string | null
+    phone?: string | null
+  } | null
   partner?: {
     id: string
     partner_code: string
-    business_name?: string
-  }
+    business_name?: string | null
+    commission_rate: number
+  } | null
 }
 
 export interface PartnerEarningWithDetails extends PartnerEarning {
@@ -95,6 +111,16 @@ export interface PartnerStatistics {
   avg_earnings_per_referral: number
 }
 
+// Aggregated submission breakdown stats
+export interface AggregatedSubmissionStats {
+  all_assignment_submissions: number
+  all_test_submissions: number
+  all_assignment_revenue: number
+  all_test_revenue: number
+  all_assignment_earnings: number
+  all_test_earnings: number
+}
+
 // Partner Overview (Dashboard)
 export interface PartnerOverview {
   partner: PartnerWithProfile
@@ -102,6 +128,7 @@ export interface PartnerOverview {
   recent_earnings: PartnerEarningWithDetails[]
   recent_referrals: ReferralWithDetails[]
   pending_withdrawals: PartnerWithdrawalWithDetails[]
+  aggregated_stats?: AggregatedSubmissionStats
 }
 
 // Filter types

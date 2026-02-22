@@ -19,7 +19,8 @@ import {
   FileText,
   ClipboardCheck,
   Wallet,
-  ArrowRight
+  ArrowRight,
+  Sparkles
 } from 'lucide-react'
 
 export default async function AdminDashboard() {
@@ -98,7 +99,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Secondary Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatsCard
             title="Total Assignments"
             value={stats?.assignments || 0}
@@ -113,6 +114,14 @@ export default async function AdminDashboard() {
             description="Platform-wide"
             icon={ClipboardCheck}
             iconColor="text-pink-500"
+          />
+
+          <StatsCard
+            title="AI Writer Revenue"
+            value={`₦${(stats?.revenueBreakdown?.aiAssignments || 0).toLocaleString()}`}
+            description="From AI assignments"
+            icon={Sparkles}
+            iconColor="text-cyan-500"
           />
 
           <StatsCard

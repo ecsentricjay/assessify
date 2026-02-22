@@ -11,7 +11,8 @@ import {
   TrendingDown,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -42,7 +43,7 @@ export default async function FinancesPage() {
           </Link>
 
           {/* Overview Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Platform Revenue</CardTitle>
@@ -53,7 +54,22 @@ export default async function FinancesPage() {
                   ₦{overview?.platformRevenue.toLocaleString() || 0}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  27% of all payments
+                  Total platform earnings
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">AI Writer Revenue</CardTitle>
+                <Sparkles className="h-4 w-4 text-cyan-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-cyan-600">
+                  ₦{overview?.revenueBreakdown?.aiAssignments.toLocaleString() || 0}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  From AI assignments
                 </p>
               </CardContent>
             </Card>

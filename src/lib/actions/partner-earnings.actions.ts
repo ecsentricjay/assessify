@@ -17,6 +17,7 @@ import {
 
 /**
  * Get all referrals for a partner
+ * ✅ FIXED: Now uses database stats instead of recalculating
  */
 export async function getPartnerReferrals(
   partnerId: string,
@@ -36,19 +37,32 @@ export async function getPartnerReferrals(
     let query = supabase
       .from('referrals')
       .select(`
-        *,
-        lecturer:profiles!referrals_referred_lecturer_id_fkey (
+        id,
+        partner_id,
+        referred_lecturer_id,
+        referral_code,
+        status,
+        first_submission_at,
+        last_submission_at,
+        total_submissions,
+        total_revenue,
+        partner_earnings,
+        created_at,
+        updated_at,
+        lecturer:profiles!referred_lecturer_id (
           id,
-          full_name,
-          email,
+          first_name,
+          last_name,
           staff_id,
           department,
-          faculty
+          faculty,
+          phone
         ),
-        partner:partners (
+        partner:partners!partner_id (
           id,
           partner_code,
-          business_name
+          business_name,
+          commission_rate
         )
       `, { count: 'exact' })
       .eq('partner_id', partnerId)
@@ -56,14 +70,6 @@ export async function getPartnerReferrals(
     // Apply filters
     if (status) {
       query = query.eq('status', status)
-    }
-
-    if (search) {
-      query = query.or(`
-        lecturer.full_name.ilike.%${search}%,
-        lecturer.email.ilike.%${search}%,
-        lecturer.staff_id.ilike.%${search}%
-      `)
     }
 
     // Apply sorting
@@ -77,49 +83,114 @@ export async function getPartnerReferrals(
     const { data, error, count } = await query
 
     if (error) {
-      return { error: error.message }
+      console.error('Referrals query error:', JSON.stringify(error, null, 2))
+      return { error: error.message || 'Failed to fetch referrals' }
     }
 
-    // Enrich referrals with submission statistics
+    console.log('✅ Referrals raw data:', data?.length, 'referrals found')
+
+    // Enrich referrals with email and submission breakdown
     const enrichedData = await Promise.all(
       (data || []).map(async (referral: any) => {
         try {
-          // Get submissions count and revenue for this referred lecturer
-          const { data: submissionStats } = await supabase
-            .from('assignment_submissions')
-            .select('cost_deducted', { count: 'exact' })
-            .eq('student_id', referral.referred_lecturer_id)
+          // Get lecturer email from auth.users
+          let lecturerEmail = ''
+          if (referral.referred_lecturer_id) {
+            const { data: authUser } = await supabase.auth.admin.getUserById(
+              referral.referred_lecturer_id
+            )
+            lecturerEmail = authUser?.user?.email || ''
+          }
 
-          const submissionCount = submissionStats?.length || 0
-          const totalRevenue = (submissionStats || []).reduce((sum: number, sub: any) => sum + (sub.cost_deducted || 0), 0)
-          
-          // Get partner's commission rate
-          const { data: partner } = await supabase
-            .from('partners')
-            .select('commission_rate')
-            .eq('id', partnerId)
-            .single()
+          // Create full_name for display
+          const lecturer = referral.lecturer as any
+          const lecturerFullName = (lecturer && typeof lecturer === 'object' && !Array.isArray(lecturer))
+            ? `${lecturer.first_name || ''} ${lecturer.last_name || ''}`.trim()
+            : 'Unknown'
 
-          const commissionRate = partner?.commission_rate || 15
-          const partnerEarnings = Math.round((totalRevenue * commissionRate) / 100)
+          // Calculate assignment vs test breakdown
+          let assignment_submissions = 0
+          let test_submissions = 0
+          let assignment_revenue = 0
+          let test_revenue = 0
+          let assignment_earnings = 0
+          let test_earnings = 0
+
+          try {
+            // Get all earnings for this referral grouped by source_type
+            const { data: earningsData } = await supabase
+              .from('partner_earnings')
+              .select('source_type, source_amount, amount')
+              .eq('referral_id', referral.id)
+
+            if (earningsData) {
+              earningsData.forEach((earning: any) => {
+                if (earning.source_type === 'assignment_submission') {
+                  assignment_submissions += 1
+                  assignment_revenue += earning.source_amount || 0
+                  assignment_earnings += earning.amount || 0
+                } else if (earning.source_type === 'test_submission') {
+                  test_submissions += 1
+                  test_revenue += earning.source_amount || 0
+                  test_earnings += earning.amount || 0
+                }
+              })
+            }
+          } catch (earningsErr) {
+            console.warn('Could not fetch earnings breakdown for referral:', referral.id, earningsErr)
+          }
+
+          // ✅ USE STATS FROM DATABASE (already calculated by trigger)
+          console.log(`Referral ${referral.referral_code}: ${referral.total_submissions} submissions, ₦${referral.total_revenue} revenue, ₦${referral.partner_earnings} earnings`)
 
           return {
             ...referral,
-            total_submissions: submissionCount,
-            total_revenue: totalRevenue,
-            partner_earnings: partnerEarnings,
+            lecturer: (lecturer && typeof lecturer === 'object' && !Array.isArray(lecturer)) ? {
+              ...lecturer,
+              full_name: lecturerFullName,
+              email: lecturerEmail,
+            } : null,
+            // Use database values, don't recalculate
+            total_submissions: referral.total_submissions || 0,
+            total_revenue: Number(referral.total_revenue) || 0,
+            partner_earnings: Number(referral.partner_earnings) || 0,
+            // Add breakdown fields
+            assignment_submissions: assignment_submissions > 0 ? assignment_submissions : null,
+            test_submissions: test_submissions > 0 ? test_submissions : null,
+            assignment_revenue: assignment_revenue > 0 ? assignment_revenue : null,
+            test_revenue: test_revenue > 0 ? test_revenue : null,
+            assignment_earnings: assignment_earnings > 0 ? assignment_earnings : null,
+            test_earnings: test_earnings > 0 ? test_earnings : null,
           }
         } catch (err) {
           console.error('Error enriching referral data:', err)
+          const lecturer = referral.lecturer as any
+          const lecturerFullName = (lecturer && typeof lecturer === 'object' && !Array.isArray(lecturer))
+            ? `${lecturer.first_name || ''} ${lecturer.last_name || ''}`.trim()
+            : 'Unknown'
+          
           return {
             ...referral,
-            total_submissions: 0,
-            total_revenue: 0,
-            partner_earnings: 0,
+            lecturer: (lecturer && typeof lecturer === 'object' && !Array.isArray(lecturer)) ? {
+              ...lecturer,
+              full_name: lecturerFullName,
+              email: '',
+            } : null,
+            total_submissions: referral.total_submissions || 0,
+            total_revenue: Number(referral.total_revenue) || 0,
+            partner_earnings: Number(referral.partner_earnings) || 0,
+            assignment_submissions: null,
+            test_submissions: null,
+            assignment_revenue: null,
+            test_revenue: null,
+            assignment_earnings: null,
+            test_earnings: null,
           }
         }
       })
     )
+
+    console.log('✅ Enriched referrals count:', enrichedData.length)
 
     const totalPages = Math.ceil((count || 0) / limit)
 
@@ -184,17 +255,28 @@ export async function getReferralById(
     const { data, error } = await supabase
       .from('referrals')
       .select(`
-        *,
-        lecturer:profiles!referrals_referred_lecturer_id_fkey (
+        id,
+        partner_id,
+        referred_lecturer_id,
+        referral_code,
+        status,
+        first_submission_at,
+        last_submission_at,
+        total_submissions,
+        total_revenue,
+        partner_earnings,
+        created_at,
+        updated_at,
+        lecturer:profiles!referred_lecturer_id (
           id,
-          full_name,
-          email,
+          first_name,
+          last_name,
           staff_id,
           department,
           faculty,
-          phone_number
+          phone
         ),
-        partner:partners (
+        partner:partners!partner_id (
           id,
           partner_code,
           business_name,
@@ -206,6 +288,16 @@ export async function getReferralById(
 
     if (error || !data) {
       return { error: 'Referral not found' }
+    }
+
+    // Add full_name to lecturer and get email
+    const lecturer = data.lecturer as any
+    if (lecturer && typeof lecturer === 'object' && !Array.isArray(lecturer)) {
+      lecturer.full_name = `${lecturer.first_name || ''} ${lecturer.last_name || ''}`.trim()
+      
+      // Get email from auth.users
+      const { data: authUser } = await supabase.auth.admin.getUserById(data.referred_lecturer_id)
+      lecturer.email = authUser?.user?.email || ''
     }
 
     return { success: true, data }
@@ -243,20 +335,37 @@ export async function getPartnerEarnings(
     let query = supabase
       .from('partner_earnings')
       .select(`
-        *,
-        referral:referrals (
+        id,
+        partner_id,
+        referral_id,
+        transaction_id,
+        amount,
+        commission_rate,
+        source_amount,
+        lecturer_amount,
+        source_type,
+        source_id,
+        submission_id,
+        student_id,
+        status,
+        withdrawn_at,
+        withdrawal_id,
+        created_at,
+        notes,
+        referral:referrals!referral_id (
           id,
           referred_lecturer_id,
           referral_code
         ),
-        transaction:transactions (
+        transaction:transactions!transaction_id (
           id,
           reference,
           amount
         ),
-        student:profiles!partner_earnings_student_id_fkey (
+        student:profiles!student_id (
           id,
-          full_name
+          first_name,
+          last_name
         )
       `, { count: 'exact' })
       .eq('partner_id', partnerId)
@@ -296,12 +405,24 @@ export async function getPartnerEarnings(
       return { error: error.message }
     }
 
+    // Add full_name to students
+    const enrichedData = (data || []).map((earning: any) => {
+      const student = earning.student as any
+      return {
+        ...earning,
+        student: (student && typeof student === 'object' && !Array.isArray(student)) ? {
+          ...student,
+          full_name: `${student.first_name || ''} ${student.last_name || ''}`.trim()
+        } : null
+      }
+    })
+
     const totalPages = Math.ceil((count || 0) / limit)
 
     return {
       success: true,
       data: {
-        data: data || [],
+        data: enrichedData || [],
         total: count || 0,
         page,
         limit,
@@ -370,15 +491,32 @@ export async function getEarningsByReferral(
     let query = supabase
       .from('partner_earnings')
       .select(`
-        *,
-        transaction:transactions (
+        id,
+        partner_id,
+        referral_id,
+        transaction_id,
+        amount,
+        commission_rate,
+        source_amount,
+        lecturer_amount,
+        source_type,
+        source_id,
+        submission_id,
+        student_id,
+        status,
+        withdrawn_at,
+        withdrawal_id,
+        created_at,
+        notes,
+        transaction:transactions!transaction_id (
           id,
           reference,
           amount
         ),
-        student:profiles!partner_earnings_student_id_fkey (
+        student:profiles!student_id (
           id,
-          full_name
+          first_name,
+          last_name
         )
       `, { count: 'exact' })
       .eq('referral_id', referralId)
@@ -414,12 +552,24 @@ export async function getEarningsByReferral(
       return { error: error.message }
     }
 
+    // Add full_name to students
+    const enrichedData = (data || []).map((earning: any) => {
+      const student = earning.student as any
+      return {
+        ...earning,
+        student: (student && typeof student === 'object' && !Array.isArray(student)) ? {
+          ...student,
+          full_name: `${student.first_name || ''} ${student.last_name || ''}`.trim()
+        } : null
+      }
+    })
+
     const totalPages = Math.ceil((count || 0) / limit)
 
     return {
       success: true,
       data: {
-        data: data || [],
+        data: enrichedData || [],
         total: count || 0,
         page,
         limit,
@@ -445,27 +595,40 @@ export async function calculateCommission(
 ): Promise<CommissionCalculation> {
   const supabase = await createClient()
 
-  // Default: Lecturer 50%, Platform 50% (no partner)
+  // Default: Lecturer 35%, Platform 65% (no partner)
   let calculation: CommissionCalculation = {
     submissionAmount,
-    lecturerAmount: submissionAmount * 0.5,
+    lecturerAmount: submissionAmount * 0.35,
     partnerAmount: 0,
-    platformAmount: submissionAmount * 0.5,
+    platformAmount: submissionAmount * 0.65,
     commissionRate: 0,
   }
 
   try {
-    // Check if lecturer has a partner
-    const { data: partnerInfo } = await supabase
-      .rpc('get_partner_by_lecturer', { lecturer_uuid: lecturerId })
-      .single() as { data: { partner_status: string; commission_rate: number } | null }
+    // Check if lecturer has a partner referral
+    const { data: referral } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        partner_id,
+        partner:partners!partner_id (
+          id,
+          commission_rate,
+          status
+        )
+      `)
+      .eq('referred_lecturer_id', lecturerId)
+      .eq('status', 'active')
+      .single()
 
-    if (partnerInfo && partnerInfo.partner_status === 'active') {
-      // Has partner: Lecturer 50%, Partner 15%, Platform 35%
-      const commissionRate = partnerInfo.commission_rate || 15
+    // Type handling
+    const partner = referral?.partner as any
+    if (partner && typeof partner === 'object' && !Array.isArray(partner) && partner.status === 'active') {
+      // Has partner: Lecturer 35%, Partner X%, Platform 50% (minus partner commission)
+      const commissionRate = partner.commission_rate || 15
       calculation = {
         submissionAmount,
-        lecturerAmount: submissionAmount * 0.5,
+        lecturerAmount: submissionAmount * 0.35,
         partnerAmount: submissionAmount * (commissionRate / 100),
         platformAmount: submissionAmount * (0.5 - commissionRate / 100),
         commissionRate,
@@ -497,29 +660,50 @@ export async function recordPartnerEarning(data: {
     const supabase = await createClient()
 
     // Get partner info for this lecturer
-    const { data: partnerInfo, error: partnerError } = await supabase
-      .rpc('get_partner_by_lecturer', { lecturer_uuid: data.lecturerId })
-      .single() as { data: { partner_id: string; referral_id: string; partner_status: string; commission_rate: number } | null; error: any }
+    const { data: referral, error: referralError } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        partner_id,
+        partner:partners!partner_id (
+          id,
+          commission_rate,
+          status
+        )
+      `)
+      .eq('referred_lecturer_id', data.lecturerId)
+      .eq('status', 'active')
+      .single()
 
-    if (partnerError || !partnerInfo || partnerInfo.partner_status !== 'active') {
+    // Type handling
+    const partner = referral?.partner as any
+    if (referralError || !referral || !partner || partner.status !== 'active') {
       // No active partner, skip earning recording
       return { success: true, data: { hasPartner: false } }
     }
 
-    // Record earning using database function
-    const { data: earningId, error: earningError } = await supabase
-      .rpc('record_partner_earning', {
-        p_partner_id: partnerInfo.partner_id,
-        p_referral_id: partnerInfo.referral_id,
-        p_transaction_id: data.transactionId,
-        p_source_amount: data.sourceAmount,
-        p_lecturer_amount: data.lecturerAmount,
-        p_commission_rate: partnerInfo.commission_rate,
-        p_source_type: data.sourceType,
-        p_source_id: data.sourceId,
-        p_submission_id: data.submissionId,
-        p_student_id: data.studentId,
+    const commissionRate = partner.commission_rate || 15
+    const partnerAmount = Math.round((data.sourceAmount * commissionRate) / 100)
+
+    // Record earning
+    const { data: earning, error: earningError } = await supabase
+      .from('partner_earnings')
+      .insert({
+        partner_id: referral.partner_id,
+        referral_id: referral.id,
+        transaction_id: data.transactionId,
+        amount: partnerAmount,
+        commission_rate: commissionRate,
+        source_amount: data.sourceAmount,
+        lecturer_amount: data.lecturerAmount,
+        source_type: data.sourceType,
+        source_id: data.sourceId,
+        submission_id: data.submissionId,
+        student_id: data.studentId,
+        status: 'pending'
       })
+      .select()
+      .single()
 
     if (earningError) {
       console.error('Record partner earning error:', earningError)
@@ -530,8 +714,8 @@ export async function recordPartnerEarning(data: {
       success: true, 
       data: { 
         hasPartner: true,
-        earningId,
-        partnerAmount: data.sourceAmount * (partnerInfo.commission_rate / 100)
+        earningId: earning.id,
+        partnerAmount
       } 
     }
   } catch (error) {

@@ -25,16 +25,16 @@ export interface AssignmentResponse {
 
 /**
  * Calculate cost based on word count
- * ₦200 for 1-1000 words, then +₦100 for each additional 1-1000 words
- * e.g., 1-1000 = ₦200, 1001-2000 = ₦300, 2001-3000 = ₦400, etc.
+ * ₦100 for 1-1000 words, then +₦100 for each additional 1-1000 words
+ * e.g., 1-1000 = ₦100, 1001-2000 = ₦200, 2001-3000 = ₦300, etc.
  */
 export async function calculateAssignmentCost(wordCount: number): Promise<number> {
   if (wordCount <= 1000) {
-    return 200; // ₦200 for up to 1000 words
+    return 100; // ₦100 for up to 1000 words
   }
   // For words beyond 1000, add ₦100 for each additional 1000-word bracket
   const additionalBrackets = Math.ceil((wordCount - 1000) / 1000);
-  return 200 + (additionalBrackets * 100);
+  return 100 + (additionalBrackets * 100);
 }
 
 /**
@@ -128,6 +128,20 @@ Generate the assignment now:`;
 }
 
 /**
+ * Calculate cost based on submission word count
+ * ₦200 for 1-1000 words, then +₦100 for each additional 1-1000 words
+ * e.g., 1-1000 = ₦200, 1001-2000 = ₦300, 2001-3000 = ₦400, etc.
+ */
+export async function calculateSubmissionCost(wordCount: number): Promise<number> {
+  if (wordCount <= 1000) {
+    return 200; // ₦200 for up to 1000 words
+  }
+  // For words beyond 1000, add ₦100 for each additional 1000-word bracket
+  const additionalBrackets = Math.ceil((wordCount - 1000) / 1000);
+  return 200 + (additionalBrackets * 100);
+}
+
+/**
  * Deduct cost from student's wallet
  */
 export async function deductAssignmentCost(
@@ -199,32 +213,65 @@ export async function deductAssignmentCost(
 }
 
 /**
- * Log assignment generation for analytics
+ * Log assignment generation to database
+ * Saves to ai_assignments table for history
  */
 export async function logAssignmentGeneration(
   userId: string,
   request: AssignmentRequest,
-  response: AssignmentResponse
+  response: { content: string; wordCount: number; cost: number }
 ) {
-  const { createClient } = await import('@/lib/supabase/server');
-  const supabase = await createClient();
-
   try {
-    // You can create an 'ai_assignments' table to track this
-    // For now, we'll use notifications as a log
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+
+    console.log('📝 Logging assignment generation to database...');
+
+    // Insert into ai_assignments table
+    const { data: assignment, error } = await supabase
+      .from('ai_assignments')
+      .insert({
+        student_id: userId,
+        question: request.question,
+        course_of_study: request.courseOfStudy,
+        course_name: request.courseName,
+        word_count: request.wordCount,
+        citation_style: request.citationStyle,
+        additional_info: request.additionalInfo || null,
+        generated_content: response.content,
+        actual_word_count: response.wordCount,
+        cost: response.cost,
+        ai_model: 'claude-3.5-sonnet', // or whichever model you're using
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error logging assignment:', error);
+      // Don't throw - logging failure shouldn't break the flow
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Assignment logged successfully:', assignment.id);
+
+    // Optional: Also create a notification for the student
     await supabase.from('notifications').insert({
       user_id: userId,
       type: 'system',
-      title: 'Assignment Generated',
-      message: `AI generated a ${response.wordCount}-word assignment for ₦${response.cost}`,
+      title: 'AI Assignment Generated',
+      message: `Your assignment for ${request.courseName} (${response.wordCount} words) has been generated successfully.`,
       metadata: {
         service: 'ai_assignment',
+        assignment_id: assignment.id,
+        course: request.courseName,
         word_count: response.wordCount,
         cost: response.cost,
-        course: request.courseName,
       },
     });
+
+    return { success: true, assignment };
   } catch (error) {
-    console.error('Error logging assignment generation:', error);
+    console.error('❌ Exception logging assignment:', error);
+    return { success: false, error: 'Failed to log assignment' };
   }
 }

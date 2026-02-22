@@ -39,12 +39,10 @@ export async function getWithdrawalRequests({
         )
       `, { count: 'exact' })
 
-    // Filter by status
     if (status !== 'all') {
       query = query.eq('status', status)
     }
 
-    // Pagination
     const from = (page - 1) * limit
     const to = from + limit - 1
 
@@ -99,7 +97,6 @@ export async function approveWithdrawal(
 
     if (error) throw error
 
-    // Log admin action
     await logAdminAction({
       actionType: 'WITHDRAWAL_APPROVED',
       targetType: 'withdrawal',
@@ -150,7 +147,6 @@ export async function rejectWithdrawal(
 
     if (error) throw error
 
-    // Log admin action
     await logAdminAction({
       actionType: 'WITHDRAWAL_REJECTED',
       targetType: 'withdrawal',
@@ -203,7 +199,6 @@ export async function markWithdrawalAsPaid(
 
     if (error) throw error
 
-    // Log admin action
     await logAdminAction({
       actionType: 'WITHDRAWAL_PAID',
       targetType: 'withdrawal',
@@ -230,20 +225,38 @@ export async function markWithdrawalAsPaid(
 
 /**
  * Get financial overview statistics
+ * ✅ FIXED: Correct revenue calculation
  */
 export async function getFinancialOverview() {
   await requireAdmin()
   const supabase = await createClient()
 
   try {
-    // Total platform revenue (27% of all payments)
+    // ✅ FIXED: Get all payment transactions (DEBIT = student payments)
     const { data: allTransactions } = await supabase
       .from('transactions')
-      .select('amount')
-      .in('purpose', ['assignment_payment', 'test_payment'])
+      .select('amount, purpose')
+      .in('purpose', ['assignment_payment', 'test_payment', 'ai_assignment'])
+      .eq('type', 'debit')
+      .eq('status', 'completed')
 
-    const totalPayments = allTransactions?.reduce((sum, tx) => sum + tx.amount, 0) || 0
-    const platformRevenue = Math.round(totalPayments * 0.27)
+    // Calculate revenue by source
+    const aiRevenue = allTransactions?.filter(tx => tx.purpose === 'ai_assignment')
+      .reduce((sum, tx) => sum + tx.amount, 0) || 0
+    
+    const submissionRevenue = allTransactions?.filter(tx => 
+      tx.purpose === 'assignment_payment' || tx.purpose === 'test_payment'
+    ).reduce((sum, tx) => sum + tx.amount, 0) || 0
+
+    // Get partner commissions
+    const { data: partnerEarnings } = await supabase
+      .from('partner_earnings')
+      .select('amount')
+
+    const totalPartnerCommission = partnerEarnings?.reduce((sum, e) => sum + e.amount, 0) || 0
+
+    // ✅ CORRECT: Platform gets 100% AI + 50% submissions - partner commission
+    const platformRevenue = Math.round(aiRevenue + (submissionRevenue * 0.5) - totalPartnerCommission)
 
     // Total in all wallets
     const { data: wallets } = await supabase
@@ -260,7 +273,7 @@ export async function getFinancialOverview() {
 
     const pendingAmount = pendingWithdrawals?.reduce((sum, w) => sum + w.amount, 0) || 0
 
-    // Approved withdrawals (awaiting payment)
+    // Approved withdrawals
     const { data: approvedWithdrawals, count: approvedCount } = await supabase
       .from('withdrawal_requests')
       .select('amount', { count: 'exact' })
@@ -276,7 +289,7 @@ export async function getFinancialOverview() {
 
     const totalPaidOut = paidWithdrawals?.reduce((sum, w) => sum + w.amount, 0) || 0
 
-    // Transaction count by type
+    // Transaction counts
     const { count: creditCount } = await supabase
       .from('transactions')
       .select('*', { count: 'exact', head: true })
@@ -305,6 +318,12 @@ export async function getFinancialOverview() {
           credits: creditCount || 0,
           debits: debitCount || 0,
           total: (creditCount || 0) + (debitCount || 0)
+        },
+        // ✅ Revenue breakdown by source
+        revenueBreakdown: {
+          aiAssignments: aiRevenue,
+          assignmentsAndTests: submissionRevenue,
+          partnerCommissions: totalPartnerCommission,
         }
       }
     }
@@ -331,7 +350,6 @@ export async function processRefund(
   const supabase = await createClient()
 
   try {
-    // Get wallet
     const { data: wallet, error: walletError } = await supabase
       .from('wallets')
       .select('*')
@@ -345,7 +363,6 @@ export async function processRefund(
     const balanceBefore = wallet.balance
     const balanceAfter = balanceBefore + amount
 
-    // Create refund transaction
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
       .insert({
@@ -371,7 +388,6 @@ export async function processRefund(
 
     if (txError) throw txError
 
-    // Update wallet balance
     const { error: updateError } = await supabase
       .from('wallets')
       .update({
@@ -382,7 +398,6 @@ export async function processRefund(
 
     if (updateError) throw updateError
 
-    // Log admin action
     await logAdminAction({
       actionType: 'REFUND_PROCESSED',
       targetType: 'wallet',

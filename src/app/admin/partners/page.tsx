@@ -92,10 +92,26 @@ export default async function AdminPartnersPage({
     })
   }
 
-  // Calculate quick stats
+  // ✅ FIXED: Calculate stats from partner.stats object
   const activeCount = filteredPartners.filter(p => p.status === 'active').length
-  const totalEarnings = filteredPartners.reduce((sum, p) => sum + Number(p.total_earnings || 0), 0)
-  const totalReferrals = filteredPartners.reduce((sum, p) => sum + Number(p.total_referrals || 0), 0)
+  
+  // Partners have stats.total_earnings, not total_earnings directly
+  const totalEarnings = filteredPartners.reduce((sum, p) => {
+    return sum + Number(p.stats?.total_earnings || 0)
+  }, 0)
+  
+  // Use stats.total_referrals
+  const totalReferrals = filteredPartners.reduce((sum, p) => {
+    return sum + Number(p.stats?.total_referrals || 0)
+  }, 0)
+
+  console.log('📊 Partner Stats Debug:', {
+    partnerCount: filteredPartners.length,
+    activeCount,
+    totalEarnings,
+    totalReferrals,
+    samplePartnerStats: filteredPartners[0]?.stats
+  })
 
   // Check if advanced filters are applied
   const hasAdvancedFilters = !!(

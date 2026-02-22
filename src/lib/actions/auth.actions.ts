@@ -255,13 +255,24 @@ export async function getCurrentUser() {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) return null
+  if (!user) {
+    console.log('getCurrentUser: No authenticated user')
+    return null
+  }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single()
+
+  if (profileError) {
+    console.error('getCurrentUser: Profile query error:', profileError)
+  }
+
+  if (!profile) {
+    console.warn('getCurrentUser: No profile found for user', user.id)
+  }
 
   return { ...user, profile }
 }

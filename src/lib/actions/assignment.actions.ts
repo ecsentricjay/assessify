@@ -213,6 +213,11 @@ export async function submitStandaloneAssignment(formData: {
     return { error: 'You have already submitted this assignment' }
   }
 
+  // Get submission cost from assignment, or use default
+  const { getDefaultSubmissionCost } = await import('./settings.actions')
+  const assignmentCost = Number(assignment.submission_cost) || null
+  const submissionCost = assignmentCost !== null && assignmentCost > 0 ? assignmentCost : await getDefaultSubmissionCost()
+
   // Create submission first
   const { data: submission, error: submissionError } = await supabase
     .from('assignment_submissions')
@@ -225,7 +230,7 @@ export async function submitStandaloneAssignment(formData: {
       file_urls: formData.fileUrls,
       is_late: isLate,
       late_days: lateDays,
-      status: 'submitted',
+      status: submissionCost > 0 ? 'payment_pending' : 'submitted',
       submitted_at: new Date().toISOString()
     })
     .select()
@@ -237,11 +242,11 @@ export async function submitStandaloneAssignment(formData: {
   }
 
   // Process payment if submission cost > 0
-  if (assignment.submission_cost > 0) {
+  if (submissionCost > 0) {
     const paymentResult = await processSubmissionPayment({
       studentId: user.id,
       lecturerId: assignment.created_by,
-      submissionAmount: assignment.submission_cost,
+      submissionAmount: submissionCost,
       sourceType: 'assignment_submission',
       sourceId: assignment.id,
       submissionId: submission.id,
@@ -287,7 +292,7 @@ export async function submitStandaloneAssignment(formData: {
       ? `Assignment submitted successfully! Note: ${lateDays} day(s) late.`
       : 'Assignment submitted successfully!',
     submission,
-    paymentProcessed: assignment.submission_cost > 0
+      paymentProcessed: submissionCost > 0
   }
 }
 
@@ -313,11 +318,16 @@ export async function retryStandaloneSubmissionPayment(submissionId: string) {
 
   const assignment = submission.assignments
 
+  // Process payment with default submission cost if not set on assignment
+  const { getDefaultSubmissionCost } = await import('./settings.actions')
+  const assignmentCost = Number(assignment.submission_cost) || null
+  const submissionCost = assignmentCost !== null && assignmentCost > 0 ? assignmentCost : await getDefaultSubmissionCost()
+
   // Process payment
   const paymentResult = await processSubmissionPayment({
     studentId: user.id,
     lecturerId: assignment.created_by,
-    submissionAmount: assignment.submission_cost,
+    submissionAmount: submissionCost,
     sourceType: 'assignment_submission',
     sourceId: assignment.id,
     submissionId: submission.id,
@@ -570,6 +580,7 @@ export async function createAssignment(formData: {
   instructions?: string
   assignmentType: string
   maxScore: number
+  allocatedMarks?: number
   deadline: string
   lateSubmissionAllowed: boolean
   latePenaltyPercentage: number
@@ -578,14 +589,66 @@ export async function createAssignment(formData: {
   aiGradingEnabled: boolean
   aiRubric?: string | null
   plagiarismCheckEnabled: boolean
+  submissionCost?: number
 }) {
-  // For course-based assignments - use createStandaloneAssignment with course context
-  return await createStandaloneAssignment({
-    displayCourseCode: '',
-    displayCourseTitle: '',
-    ...formData,
-    submissionCost: 0
-  })
+  const user = await getCurrentUser()
+
+  if (!user || user.profile?.role !== 'lecturer') {
+    return { error: 'Unauthorized access', success: false }
+  }
+
+  const supabase = await createClient()
+  const adminClient = createServiceClient()
+
+  // Verify lecturer has access to the course
+  const { data: courseAccess } = await supabase
+    .from('course_lecturers')
+    .select('id')
+    .eq('course_id', formData.courseId)
+    .eq('lecturer_id', user.id)
+    .single()
+
+  if (!courseAccess) {
+    return { error: 'You do not have access to this course', success: false }
+  }
+
+  // Create course-based assignment
+  const { data: assignment, error } = await adminClient
+    .from('assignments')
+    .insert({
+      created_by: user.id,
+      is_standalone: false,
+      course_id: formData.courseId,
+      title: formData.title,
+      description: formData.description,
+      instructions: formData.instructions,
+      assignment_type: formData.assignmentType,
+      max_score: formData.maxScore,
+      allocated_marks: formData.allocatedMarks || formData.maxScore,
+      deadline: formData.deadline,
+      late_submission_allowed: formData.lateSubmissionAllowed,
+      late_penalty_percentage: formData.latePenaltyPercentage,
+      allowed_file_types: formData.allowedFileTypes,
+      max_file_size_mb: formData.maxFileSizeMb,
+      submission_cost: formData.submissionCost || 0,
+      ai_grading_enabled: formData.aiGradingEnabled,
+      ai_grading_rubric: formData.aiRubric || null,
+      plagiarism_check_enabled: formData.plagiarismCheckEnabled,
+      is_published: true,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Course assignment creation error:', error)
+    return { error: error.message, success: false }
+  }
+
+  revalidatePath(`/lecturer/courses/${formData.courseId}`)
+  return { 
+    success: true, 
+    assignment
+  }
 }
 
 export async function getAssignmentById(assignmentId: string) {

@@ -562,6 +562,7 @@ export async function getPartnerOverview(
 ): Promise<PartnerActionResponse> {
   try {
     const supabase = await createClient()
+    const adminClient = createServiceClient()
 
     // Get partner with profile
     const { data: partner, error: partnerError } = await supabase
@@ -586,7 +587,6 @@ export async function getPartnerOverview(
     // Get partner's email from auth.users using service role
     let partnerEmail = ''
     try {
-      const adminClient = createServiceClient()
       const { data: { users } } = await adminClient.auth.admin.listUsers()
       const user = users.find(u => u.id === partner.user_id)
       if (user?.email) {
@@ -603,7 +603,6 @@ export async function getPartnerOverview(
     // Get statistics
     let statistics: PartnerStatistics | null = null
     try {
-      const adminClient = createServiceClient()
       const { data: statsData, error: statsError } = await adminClient
         .rpc('get_partner_statistics', { partner_uuid: partnerId })
         .single()
@@ -646,12 +645,32 @@ export async function getPartnerOverview(
       .order('created_at', { ascending: false })
       .limit(10)
 
-    // Get recent referrals (last 5)
+    // Enrich earnings with student full names
+    const enrichedEarnings = (recentEarnings || []).map((earning: any) => {
+      const student = earning.student
+      return {
+        ...earning,
+        student: student ? {
+          id: student.id,
+          full_name: `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Unknown Student',
+        } : null
+      }
+    })
+
+    // Get recent referrals (last 5) with FIXED full_name computation
     const { data: recentReferrals } = await supabase
       .from('referrals')
       .select(`
-        *,
-        lecturer:profiles!referrals_referred_lecturer_id_fkey (
+        id,
+        partner_id,
+        referred_lecturer_id,
+        referral_code,
+        status,
+        total_submissions,
+        partner_earnings,
+        created_at,
+        updated_at,
+        lecturer:profiles!referred_lecturer_id (
           id,
           first_name,
           last_name,
@@ -664,6 +683,76 @@ export async function getPartnerOverview(
       .order('created_at', { ascending: false })
       .limit(5)
 
+    // FIXED: Enrich referrals with proper full_name, email, and submission breakdown
+    const enrichedReferrals = await Promise.all(
+      (recentReferrals || []).map(async (ref: any) => {
+        const lecturer = ref.lecturer
+        
+        // Get lecturer email from auth.users
+        let lecturerEmail = ''
+        if (ref.referred_lecturer_id) {
+          try {
+            const { data: authUser } = await adminClient.auth.admin.getUserById(
+              ref.referred_lecturer_id
+            )
+            lecturerEmail = authUser?.user?.email || ''
+          } catch (err) {
+            console.warn('Could not fetch lecturer email:', err)
+          }
+        }
+
+        // Calculate assignment vs test breakdown
+        let assignment_submissions = 0
+        let test_submissions = 0
+        let assignment_revenue = 0
+        let test_revenue = 0
+        let assignment_earnings = 0
+        let test_earnings = 0
+
+        try {
+          // Get all earnings for this referral grouped by source_type
+          const { data: earningsData } = await supabase
+            .from('partner_earnings')
+            .select('source_type, source_amount, amount')
+            .eq('referral_id', ref.id)
+
+          if (earningsData) {
+            earningsData.forEach((earning: any) => {
+              if (earning.source_type === 'assignment_submission') {
+                assignment_submissions += 1
+                assignment_revenue += earning.source_amount || 0
+                assignment_earnings += earning.amount || 0
+              } else if (earning.source_type === 'test_submission') {
+                test_submissions += 1
+                test_revenue += earning.source_amount || 0
+                test_earnings += earning.amount || 0
+              }
+            })
+          }
+        } catch (earningsErr) {
+          console.warn('Could not fetch earnings breakdown for referral:', earningsErr)
+        }
+
+        return {
+          ...ref,
+          assignment_submissions: assignment_submissions > 0 ? assignment_submissions : null,
+          test_submissions: test_submissions > 0 ? test_submissions : null,
+          assignment_revenue: assignment_revenue > 0 ? assignment_revenue : null,
+          test_revenue: test_revenue > 0 ? test_revenue : null,
+          assignment_earnings: assignment_earnings > 0 ? assignment_earnings : null,
+          test_earnings: test_earnings > 0 ? test_earnings : null,
+          lecturer: lecturer ? {
+            id: lecturer.id,
+            full_name: `${lecturer.first_name || ''} ${lecturer.last_name || ''}`.trim() || 'Unknown Lecturer',
+            email: lecturerEmail,
+            staff_id: lecturer.staff_id,
+            department: lecturer.department,
+            faculty: lecturer.faculty,
+          } : null
+        }
+      })
+    )
+
     // Get pending withdrawals
     const { data: pendingWithdrawals } = await supabase
       .from('partner_withdrawals')
@@ -672,12 +761,53 @@ export async function getPartnerOverview(
       .in('status', ['pending', 'approved'])
       .order('requested_at', { ascending: false })
 
+    // For dashboard display: calculate aggregated assignment/test stats from ALL referrals
+    let all_assignment_submissions = 0
+    let all_test_submissions = 0
+    let all_assignment_revenue = 0
+    let all_test_revenue = 0
+    let all_assignment_earnings = 0
+    let all_test_earnings = 0
+
+    try {
+      // Get all earnings grouped by source_type for this partner
+      const { data: allEarningsData } = await supabase
+        .from('partner_earnings')
+        .select('source_type, source_amount, amount')
+        .eq('partner_id', partnerId)
+
+      if (allEarningsData) {
+        allEarningsData.forEach((earning: any) => {
+          if (earning.source_type === 'assignment_submission') {
+            all_assignment_submissions += 1
+            all_assignment_revenue += earning.source_amount || 0
+            all_assignment_earnings += earning.amount || 0
+          } else if (earning.source_type === 'test_submission') {
+            all_test_submissions += 1
+            all_test_revenue += earning.source_amount || 0
+            all_test_earnings += earning.amount || 0
+          }
+        })
+      }
+    } catch (allEarningsErr) {
+      console.warn('Could not fetch aggregated earnings:', allEarningsErr)
+    }
+
     const overview: PartnerOverview = {
       partner: partner as PartnerWithProfile,
       statistics: statistics || defaultStatistics,
-      recent_earnings: recentEarnings || [],
-      recent_referrals: recentReferrals || [],
+      recent_earnings: enrichedEarnings || [],
+      recent_referrals: enrichedReferrals || [],
       pending_withdrawals: pendingWithdrawals || [],
+      // Add aggregated breakdown stats for dashboard
+      aggregated_stats: {
+        all_assignment_submissions,
+        all_test_submissions,
+        all_assignment_revenue,
+        all_test_revenue,
+        all_assignment_earnings,
+        all_test_earnings,
+      }
     }
 
     return { success: true, data: overview }

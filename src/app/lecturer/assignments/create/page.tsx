@@ -1,11 +1,9 @@
-// Save as: src/app/lecturer/assignments/create/page.tsx
-// This replaces the existing page that showed "no course selected"
-
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createStandaloneAssignment } from '@/lib/actions/standalone-assignment.actions'
+import { getDefaultSubmissionCost } from '@/lib/actions/settings.actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,12 +19,22 @@ export default function CreateStandaloneAssignmentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<{ accessCode: string; shareableLink: string } | null>(null)
+  const [defaultSubmissionCost, setDefaultSubmissionCost] = useState(200)
   
   const [assignmentType, setAssignmentType] = useState('general')
   const [lateSubmissionAllowed, setLateSubmissionAllowed] = useState(false)
   const [aiGradingEnabled, setAiGradingEnabled] = useState(false)
   const [plagiarismCheckEnabled, setPlagiarismCheckEnabled] = useState(true)
   const [aiRubric, setAiRubric] = useState('')
+
+  useEffect(() => {
+    // Fetch default submission cost from admin settings
+    async function loadSettings() {
+      const cost = await getDefaultSubmissionCost()
+      setDefaultSubmissionCost(cost)
+    }
+    loadSettings()
+  }, [])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -50,11 +58,13 @@ export default function CreateStandaloneAssignmentPage() {
         : 0,
       allowedFileTypes: ['pdf', 'docx', 'txt', 'jpg', 'png'],
       maxFileSizeMb: parseInt(formData.get('maxFileSizeMb') as string),
-      submissionCost: 0, // Set by system, not lecturer
+      submissionCost: defaultSubmissionCost, // Auto-set from admin settings
       aiGradingEnabled,
       aiRubric: aiGradingEnabled ? aiRubric : null,
       plagiarismCheckEnabled,
     }
+
+    console.log('📝 Creating assignment with data:', data) // Debug log
 
     const result = await createStandaloneAssignment(data)
 
@@ -271,7 +281,7 @@ export default function CreateStandaloneAssignmentPage() {
                 </div>
               </div>
 
-              {/* Deadline */}
+              {/* Deadline & Submission Cost */}
               <div className="space-y-4 pt-6 border-t">
                 <h3 className="text-lg font-semibold">Deadline & Submission</h3>
                 
@@ -283,6 +293,12 @@ export default function CreateStandaloneAssignmentPage() {
                     type="datetime-local"
                     required
                   />
+                </div>
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    <strong>💳 Submission Cost:</strong> Students will be charged <strong>₦{defaultSubmissionCost.toLocaleString()}</strong> to submit this assignment. This is the default rate set by administrators.
+                  </p>
                 </div>
 
                 <div className="flex items-center space-x-2">

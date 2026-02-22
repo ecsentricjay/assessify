@@ -26,10 +26,10 @@ export default function SystemSettingsForm({
 }: SystemSettingsFormProps) {
   const [loading, setLoading] = useState(false)
   const [settings, setSettings] = useState({
-    platformFeePercentage: initialSettings.platformFeePercentage || 27,
-    lecturerPercentage: initialSettings.lecturerPercentage || 50,
+    platformFeePercentage: initialSettings.platformFeePercentage || 50,
+    lecturerPercentage: initialSettings.lecturerPercentage || 35,
     partnerPercentage: initialSettings.partnerPercentage || 15,
-    platformPercentage: initialSettings.platformPercentage || 35,
+    platformPercentage: initialSettings.platformPercentage || 50,
     defaultCommissionRate: initialSettings.defaultCommissionRate || 15,
     systemNotes: initialSettings.systemNotes || '',
   })
@@ -56,10 +56,10 @@ export default function SystemSettingsForm({
 
   const handleReset = () => {
     setSettings({
-      platformFeePercentage: 27,
-      lecturerPercentage: 50,
+      platformFeePercentage: 50,
+      lecturerPercentage: 35,
       partnerPercentage: 15,
-      platformPercentage: 35,
+      platformPercentage: 50,
       defaultCommissionRate: 15,
       systemNotes: '',
     })

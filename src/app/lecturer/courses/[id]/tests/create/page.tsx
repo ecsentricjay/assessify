@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { createCourseTest } from '@/lib/actions/test.actions'
 import { getCourseById } from '@/lib/actions/course.actions'
+import { getDefaultTestCost } from '@/lib/actions/settings.actions'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 
@@ -24,6 +25,7 @@ export default function CreateCourseTestPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [defaultTestCost, setDefaultTestCost] = useState(50)
 
   // Test configuration
   const [title, setTitle] = useState('')
@@ -59,6 +61,11 @@ export default function CreateCourseTestPage() {
       if (result.course) {
         setCourse(result.course)
       }
+
+      // Fetch default test cost from admin settings
+      const cost = await getDefaultTestCost()
+      setDefaultTestCost(cost)
+      console.log('💰 Loaded default test cost:', cost)
     } catch (err) {
       console.error('Error loading course:', err)
       setError('Failed to load course')
@@ -110,7 +117,7 @@ export default function CreateCourseTestPage() {
         end_time: endTime,
         pass_mark: passmark,
         max_attempts: maxAttempts,
-        access_cost: 0,
+        access_cost: defaultTestCost,
         shuffle_questions: shuffleQuestions,
         shuffle_options: shuffleOptions,
         show_results_immediately: showResultsImmediately,
@@ -338,6 +345,13 @@ export default function CreateCourseTestPage() {
                   onChange={(e) => setMaxAttempts(parseInt(e.target.value))}
                   min="1"
                 />
+              </div>
+
+              {/* Access cost information */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <strong>💳 Test Access Cost:</strong> Students will be charged <strong>₦{defaultTestCost}</strong> to take this test. This is the default rate set by administrators.
+                </p>
               </div>
             </CardContent>
           </Card>

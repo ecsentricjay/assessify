@@ -6,12 +6,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { updatePricingSettings } from '@/lib/actions/settings.actions'
 
 interface PricingSettings {
   assignmentWriterBase: number
   assignmentWriterPerBracket: number
   assignmentSubmissionBase: number
+  assignmentSubmissionPerBracket: number
   testSubmissionBase: number
+  defaultSubmissionCost: number
 }
 
 export default function PricingSettingsForm({
@@ -25,6 +28,7 @@ export default function PricingSettingsForm({
 
   const handleChange = (key: keyof PricingSettings, value: number) => {
     setSettings({ ...settings, [key]: value })
+    setMessage(null) // Clear any previous messages when editing
   }
 
   const handleSave = async () => {
@@ -32,18 +36,22 @@ export default function PricingSettingsForm({
     setMessage(null)
 
     try {
-      // In a real app, this would call an API to save settings
-      // For now, we'll simulate the save
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      console.log('💾 Saving pricing settings to database:', settings)
+      
+      // ✅ CHANGED: Actually save to database
+      const result = await updatePricingSettings(settings)
 
-      setMessage({
-        type: 'success',
-        text: 'Pricing settings updated successfully!',
-      })
-
-      // Simulate saving to backend
-      console.log('Saving pricing settings:', settings)
+      if (result.success) {
+        setMessage({
+          type: 'success',
+          text: 'Pricing settings updated successfully! Changes will apply to all new submissions.',
+        })
+        console.log('✅ Settings saved successfully')
+      } else {
+        throw new Error(result.error || 'Failed to save')
+      }
     } catch (error) {
+      console.error('❌ Failed to save pricing settings:', error)
       setMessage({
         type: 'error',
         text: 'Failed to save pricing settings. Please try again.',
@@ -151,25 +159,99 @@ export default function PricingSettingsForm({
         <CardContent className="pt-6 space-y-4">
           <h3 className="font-semibold text-lg">Assignment Submission</h3>
           <p className="text-sm text-gray-600">
-            Default base fee for assignment submissions (lecturers can customize per assignment)
+            Pricing structure: Base fee for 1-1000 words, then additional fee per bracket
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Base Price (1-1000 words)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">₦</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={settings.assignmentSubmissionBase}
+                  onChange={(e) =>
+                    handleChange('assignmentSubmissionBase', Number(e.target.value))
+                  }
+                  disabled={saving}
+                />
+              </div>
+              <p className="text-xs text-gray-500">Price for 1-1000 words</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Per Additional Bracket (1000 words)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">₦</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={settings.assignmentSubmissionPerBracket}
+                  onChange={(e) =>
+                    handleChange('assignmentSubmissionPerBracket', Number(e.target.value))
+                  }
+                  disabled={saving}
+                />
+              </div>
+              <p className="text-xs text-gray-500">Price for each additional 1000-word bracket</p>
+            </div>
+          </div>
+
+          {/* Example Pricing */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <p className="font-medium text-blue-900 mb-2">Example Pricing:</p>
+            <ul className="space-y-1 text-blue-800">
+              <li>
+                • 500 words: ₦{settings.assignmentSubmissionBase}
+              </li>
+              <li>
+                • 1000 words: ₦{settings.assignmentSubmissionBase}
+              </li>
+              <li>
+                • 1500 words: ₦{settings.assignmentSubmissionBase + settings.assignmentSubmissionPerBracket}
+              </li>
+              <li>
+                • 2000 words: ₦{settings.assignmentSubmissionBase + settings.assignmentSubmissionPerBracket}
+              </li>
+              <li>
+                • 2500 words: ₦{settings.assignmentSubmissionBase + settings.assignmentSubmissionPerBracket * 2}
+              </li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Assignment Default Submission Cost */}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <h3 className="font-semibold text-lg">Default Assignment Submission Cost</h3>
+          <p className="text-sm text-gray-600">
+            Default cost applied to all assignments when created by lecturers
           </p>
 
           <div className="space-y-2">
-            <Label>Base Price</Label>
+            <Label>Default Submission Cost</Label>
             <div className="flex items-center gap-2">
               <span className="text-gray-600">₦</span>
               <Input
                 type="number"
                 min={0}
-                value={settings.assignmentSubmissionBase}
+                value={settings.defaultSubmissionCost}
                 onChange={(e) =>
-                  handleChange('assignmentSubmissionBase', Number(e.target.value))
+                  handleChange('defaultSubmissionCost', Number(e.target.value))
                 }
                 disabled={saving}
               />
             </div>
             <p className="text-xs text-gray-500">
-              Default flat rate charged per assignment submission
+              Amount automatically applied to all assignments (e.g., ₦200 per submission)
+            </p>
+          </div>
+
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <p className="text-blue-900">
+              💡 <strong>How it works:</strong> When lecturers create assignments, the submission cost is automatically set to <strong>₦{settings.defaultSubmissionCost}</strong>. Students must pay this amount to submit each assignment.
             </p>
           </div>
         </CardContent>
@@ -178,13 +260,13 @@ export default function PricingSettingsForm({
       {/* Test Submission */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <h3 className="font-semibold text-lg">Test Submission</h3>
+          <h3 className="font-semibold text-lg">Test Access Cost</h3>
           <p className="text-sm text-gray-600">
-            Default base fee for test submissions (lecturers can customize per test)
+            Default cost for students to take a test
           </p>
 
           <div className="space-y-2">
-            <Label>Base Price</Label>
+            <Label>Test Access Cost</Label>
             <div className="flex items-center gap-2">
               <span className="text-gray-600">₦</span>
               <Input
@@ -198,22 +280,36 @@ export default function PricingSettingsForm({
               />
             </div>
             <p className="text-xs text-gray-500">
-              Default flat rate charged per test submission
+              Flat rate charged per test attempt (default ₦50)
+            </p>
+          </div>
+
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <p className="text-blue-900">
+              💡 <strong>How it works:</strong> When students start a test, they are charged <strong>₦{settings.testSubmissionBase}</strong> from their wallet. This fee applies to all tests.
             </p>
           </div>
         </CardContent>
       </Card>
 
       {/* Save Button */}
-      <Button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full md:w-auto"
-        size="lg"
-      >
-        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {saving ? 'Saving...' : 'Save Pricing Settings'}
-      </Button>
+      <div className="flex items-center gap-4">
+        <Button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full md:w-auto"
+          size="lg"
+        >
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {saving ? 'Saving...' : 'Save Pricing Settings'}
+        </Button>
+        
+        {!message && (
+          <p className="text-sm text-gray-500">
+            💾 Changes will apply to all new submissions after saving
+          </p>
+        )}
+      </div>
     </div>
   )
 }

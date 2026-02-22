@@ -16,7 +16,8 @@ import {
   TrendingUp,
   Award,
   FileText,
-  ArrowUpRight
+  ArrowUpRight,
+  Sparkles
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -59,7 +60,7 @@ export default async function PlatformReportsPage({
           <DollarSign className="h-5 w-5 text-green-600" />
           Financial Overview
         </h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card className="border-2">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -85,7 +86,22 @@ export default async function PlatformReportsPage({
                 ₦{financial?.platformEarnings.toLocaleString() || '0'}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                30% of revenue
+                Platform share
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">AI Writer</CardTitle>
+              <Sparkles className="h-4 w-4 text-cyan-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-cyan-600">
+                ₦{financial?.aiAssignmentRevenue.toLocaleString() || '0'}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                AI assignments
               </p>
             </CardContent>
           </Card>
@@ -100,22 +116,22 @@ export default async function PlatformReportsPage({
                 ₦{financial?.lecturerEarnings.toLocaleString() || '0'}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                70% of revenue
+                Lecturer share
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-2">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Net Revenue</CardTitle>
-              <ArrowUpRight className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Partner Earnings</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                ₦{financial?.netRevenue.toLocaleString() || '0'}
+              <div className="text-2xl font-bold text-orange-600">
+                ₦{financial?.partnerEarnings.toLocaleString() || '0'}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                After deductions
+                Partner commissions
               </p>
             </CardContent>
           </Card>

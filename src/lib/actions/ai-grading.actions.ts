@@ -711,7 +711,8 @@ export async function aiGradeAllTestAttempts(
 }
 
 /**
- * AI grade all assignment submissions
+ * AI grade all assignment submissions (for regular course assignments)
+ * ✅ FIXED: Better error handling and return values for UI
  */
 export async function aiGradeAllAssignmentSubmissions(
   assignmentId: string,
@@ -719,6 +720,8 @@ export async function aiGradeAllAssignmentSubmissions(
 ): Promise<{
   success: boolean;
   gradedCount?: number;
+  score?: number; // ✅ Added for UI compatibility
+  feedback?: string; // ✅ Added for UI compatibility
   error?: string;
 }> {
   try {
@@ -733,18 +736,14 @@ export async function aiGradeAllAssignmentSubmissions(
     // Get the assignment
     const { data: assignment, error: assignmentError } = await supabase
       .from("assignments")
-      .select("id, created_by, title, instructions, max_score")
+      .select("id, created_by, title, description, max_score, is_standalone")
       .eq("id", assignmentId)
-      .maybeSingle();
+      .eq("is_standalone", false) // ✅ Regular course assignment
+      .single();
 
-    if (assignmentError) {
+    if (assignmentError || !assignment) {
       console.error("Assignment lookup error:", assignmentError);
-      throw new Error(`Failed to fetch assignment: ${assignmentError.message}`);
-    }
-
-    if (!assignment) {
-      console.error("Assignment not found for ID:", assignmentId);
-      throw new Error(`Assignment not found. ID: ${assignmentId}`);
+      throw new Error(`Assignment not found`);
     }
 
     // Verify lecturer owns this assignment
@@ -752,25 +751,31 @@ export async function aiGradeAllAssignmentSubmissions(
       throw new Error("Unauthorized access to assignment");
     }
 
-    // Get all ungraded submissions for this assignment
+    // Get all ungraded submissions
     const { data: submissions, error: submissionsError } = await supabase
       .from("assignment_submissions")
-      .select("id, student_id, submission_text, file_urls")
+      .select("id, student_id, submission_text, file_urls, status")
       .eq("assignment_id", assignmentId)
-      .is("final_score", null);
+      .neq("status", "graded"); // Only ungraded
 
-    if (submissionsError) throw submissionsError;
+    if (submissionsError) {
+      console.error("Submissions fetch error:", submissionsError);
+      throw submissionsError;
+    }
 
     if (!submissions || submissions.length === 0) {
       return {
         success: true,
         gradedCount: 0,
+        score: 0,
+        feedback: "No pending submissions to grade"
       };
     }
 
     console.log(`AI grading ${submissions.length} assignment submissions...`);
 
     let gradedCount = 0;
+    const errors: string[] = [];
 
     // Grade each submission
     for (const submission of submissions) {
@@ -778,12 +783,15 @@ export async function aiGradeAllAssignmentSubmissions(
       const hasDocuments = submission.file_urls && Array.isArray(submission.file_urls) && submission.file_urls.length > 0;
 
       if (!hasText && !hasDocuments) {
-        continue; // Skip empty submissions
+        console.warn(`Skipping empty submission ${submission.id}`);
+        continue;
       }
 
       try {
         let aiResult;
-        const question = `${assignment.title}\n\n${assignment.instructions}`;
+        const question = assignment.description 
+          ? `${assignment.title}\n\n${assignment.description}`
+          : assignment.title;
 
         // If documents are present, try to grade using file attachments first
         if (hasDocuments) {
@@ -794,7 +802,8 @@ export async function aiGradeAllAssignmentSubmissions(
               assignment.max_score,
               customRubric
             );
-          } catch (_fileError) {
+          } catch (fileError) {
+            console.warn(`File grading failed for submission ${submission.id}, falling back to text extraction`);
             // Fallback to text extraction
             const contentToGrade = await extractTextFromSubmission(
               submission.file_urls,
@@ -803,6 +812,7 @@ export async function aiGradeAllAssignmentSubmissions(
 
             if (!contentToGrade || contentToGrade.trim().length === 0) {
               console.warn(`Skipping submission ${submission.id}: unable to extract content`);
+              errors.push(`Submission ${submission.id}: Could not extract content`);
               continue;
             }
 
@@ -818,7 +828,7 @@ export async function aiGradeAllAssignmentSubmissions(
           const contentToGrade = submission.submission_text || "";
           
           if (!contentToGrade || contentToGrade.trim().length === 0) {
-            continue; // Skip empty
+            continue;
           }
 
           aiResult = await gradeEssayWithAI(
@@ -830,41 +840,39 @@ export async function aiGradeAllAssignmentSubmissions(
         }
 
         // Update submission with AI grade
-        await supabase
+        const { error: updateError } = await supabase
           .from("assignment_submissions")
           .update({
             final_score: aiResult.score,
             lecturer_feedback: aiResult.feedback,
-            ai_feedback: aiResult.feedback,
             status: "graded",
             graded_at: new Date().toISOString(),
             graded_by: user.id,
-            ai_grading_data: {
-              score: aiResult.score,
-              percentage: aiResult.percentage,
-              feedback: aiResult.feedback,
-              strengths: aiResult.strengths,
-              improvements: aiResult.improvements,
-              gradingBreakdown: aiResult.gradingBreakdown,
-              gradedAt: new Date().toISOString(),
-              gradedBy: "ai",
-            },
+            updated_at: new Date().toISOString()
           })
           .eq("id", submission.id);
 
+        if (updateError) {
+          console.error(`Failed to update submission ${submission.id}:`, updateError);
+          errors.push(`Submission ${submission.id}: ${updateError.message}`);
+          continue;
+        }
+
         gradedCount++;
+        console.log(`✅ Graded submission ${submission.id}: ${aiResult.score}/${assignment.max_score}`);
       } catch (error) {
         console.error("Error grading individual submission:", error);
-        // Continue with next submission even if one fails
+        errors.push(`Submission error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
     revalidatePath(`/lecturer/assignments/${assignmentId}/submissions`);
-    revalidatePath(`/lecturer/assignments/standalone/${assignmentId}`);
 
     return {
       success: true,
       gradedCount,
+      score: gradedCount, // ✅ Return count as score for UI display
+      feedback: `Successfully graded ${gradedCount} of ${submissions.length} submissions${errors.length > 0 ? `. ${errors.length} failed.` : ''}`,
     };
   } catch (error) {
     console.error("Error AI grading all assignment submissions:", error);
@@ -877,6 +885,7 @@ export async function aiGradeAllAssignmentSubmissions(
 
 /**
  * AI grade all standalone assignment submissions
+ * ✅ FIXED: Uses correct table (assignment_submissions, not standalone_submissions)
  */
 export async function aiGradeAllStandaloneSubmissions(
   assignmentId: string,
@@ -884,6 +893,8 @@ export async function aiGradeAllStandaloneSubmissions(
 ): Promise<{
   success: boolean;
   gradedCount?: number;
+  score?: number; // ✅ Added for UI compatibility
+  feedback?: string; // ✅ Added for UI compatibility
   error?: string;
 }> {
   try {
@@ -895,21 +906,17 @@ export async function aiGradeAllStandaloneSubmissions(
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Get the standalone assignment
+    // ✅ Get the standalone assignment from assignments table
     const { data: assignment, error: assignmentError } = await supabase
-      .from("standalone_assignments")
-      .select("id, created_by, title, instructions, max_score")
+      .from("assignments")
+      .select("id, created_by, title, description, max_score, is_standalone")
       .eq("id", assignmentId)
-      .maybeSingle();
+      .eq("is_standalone", true)
+      .single();
 
-    if (assignmentError) {
+    if (assignmentError || !assignment) {
       console.error("Standalone assignment lookup error:", assignmentError);
-      throw new Error(`Failed to fetch assignment: ${assignmentError.message}`);
-    }
-
-    if (!assignment) {
-      console.error("Standalone assignment not found for ID:", assignmentId);
-      throw new Error(`Assignment not found. ID: ${assignmentId}`);
+      throw new Error(`Assignment not found`);
     }
 
     // Verify lecturer owns this assignment
@@ -917,25 +924,31 @@ export async function aiGradeAllStandaloneSubmissions(
       throw new Error("Unauthorized access to assignment");
     }
 
-    // Get all ungraded submissions for this assignment
+    // ✅ FIXED: Query assignment_submissions (not standalone_submissions)
     const { data: submissions, error: submissionsError } = await supabase
-      .from("standalone_submissions")
-      .select("id, student_id, submission_text, file_urls")
+      .from("assignment_submissions")
+      .select("id, student_id, submission_text, file_urls, status")
       .eq("assignment_id", assignmentId)
-      .is("final_score", null);
+      .neq("status", "graded"); // ✅ Only get ungraded submissions
 
-    if (submissionsError) throw submissionsError;
+    if (submissionsError) {
+      console.error("Submissions fetch error:", submissionsError);
+      throw submissionsError;
+    }
 
     if (!submissions || submissions.length === 0) {
       return {
         success: true,
         gradedCount: 0,
+        score: 0,
+        feedback: "No pending submissions to grade"
       };
     }
 
     console.log(`AI grading ${submissions.length} standalone assignment submissions...`);
 
     let gradedCount = 0;
+    const errors: string[] = [];
 
     // Grade each submission
     for (const submission of submissions) {
@@ -943,12 +956,15 @@ export async function aiGradeAllStandaloneSubmissions(
       const hasDocuments = submission.file_urls && Array.isArray(submission.file_urls) && submission.file_urls.length > 0;
 
       if (!hasText && !hasDocuments) {
-        continue; // Skip empty submissions
+        console.warn(`Skipping empty submission ${submission.id}`);
+        continue;
       }
 
       try {
         let aiResult;
-        const question = `${assignment.title}\n\n${assignment.instructions}`;
+        const question = assignment.description 
+          ? `${assignment.title}\n\n${assignment.description}`
+          : assignment.title;
 
         // If documents are present, try to grade using file attachments first
         if (hasDocuments) {
@@ -959,7 +975,8 @@ export async function aiGradeAllStandaloneSubmissions(
               assignment.max_score,
               customRubric
             );
-          } catch (_fileError) {
+          } catch (fileError) {
+            console.warn(`File grading failed for submission ${submission.id}, falling back to text extraction`);
             // Fallback to text extraction
             const contentToGrade = await extractTextFromSubmission(
               submission.file_urls,
@@ -968,6 +985,7 @@ export async function aiGradeAllStandaloneSubmissions(
 
             if (!contentToGrade || contentToGrade.trim().length === 0) {
               console.warn(`Skipping submission ${submission.id}: unable to extract content`);
+              errors.push(`Submission ${submission.id}: Could not extract content`);
               continue;
             }
 
@@ -983,7 +1001,7 @@ export async function aiGradeAllStandaloneSubmissions(
           const contentToGrade = submission.submission_text || "";
           
           if (!contentToGrade || contentToGrade.trim().length === 0) {
-            continue; // Skip empty
+            continue;
           }
 
           aiResult = await gradeEssayWithAI(
@@ -994,33 +1012,30 @@ export async function aiGradeAllStandaloneSubmissions(
           );
         }
 
-        // Update submission with AI grade
-        await supabase
-          .from("standalone_submissions")
+        // ✅ Update submission with AI grade (using assignment_submissions table)
+        const { error: updateError } = await supabase
+          .from("assignment_submissions")
           .update({
             final_score: aiResult.score,
             lecturer_feedback: aiResult.feedback,
-            ai_feedback: aiResult.feedback,
             status: "graded",
             graded_at: new Date().toISOString(),
             graded_by: user.id,
-            ai_grading_data: {
-              score: aiResult.score,
-              percentage: aiResult.percentage,
-              feedback: aiResult.feedback,
-              strengths: aiResult.strengths,
-              improvements: aiResult.improvements,
-              gradingBreakdown: aiResult.gradingBreakdown,
-              gradedAt: new Date().toISOString(),
-              gradedBy: "ai",
-            },
+            updated_at: new Date().toISOString()
           })
           .eq("id", submission.id);
 
+        if (updateError) {
+          console.error(`Failed to update submission ${submission.id}:`, updateError);
+          errors.push(`Submission ${submission.id}: ${updateError.message}`);
+          continue;
+        }
+
         gradedCount++;
+        console.log(`✅ Graded submission ${submission.id}: ${aiResult.score}/${assignment.max_score}`);
       } catch (error) {
         console.error("Error grading individual standalone submission:", error);
-        // Continue with next submission even if one fails
+        errors.push(`Submission error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -1029,6 +1044,8 @@ export async function aiGradeAllStandaloneSubmissions(
     return {
       success: true,
       gradedCount,
+      score: gradedCount, // ✅ Return count as score for UI display
+      feedback: `Successfully graded ${gradedCount} of ${submissions.length} submissions${errors.length > 0 ? `. ${errors.length} failed.` : ''}`,
     };
   } catch (error) {
     console.error("Error AI grading all standalone assignment submissions:", error);

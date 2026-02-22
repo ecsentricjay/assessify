@@ -59,11 +59,11 @@ export default function AssessifyLanding() {
             <div className="space-y-8 text-white">
               <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2">
                 <Star className="w-4 h-4 text-[#38D4E5]" />
-                <span className="text-sm font-medium">🇳🇬 Built for Nigerian Universities</span>
+                <span className="text-sm font-medium">Built for Nigerian Institutions</span>
               </div>
 
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
-                Revolutionize Academic Assessment in Nigeria
+                Revolutionizing Academic Assessment in Nigeria
               </h1>
 
               <p className="text-xl text-gray-100 leading-relaxed max-w-xl">
@@ -77,9 +77,6 @@ export default function AssessifyLanding() {
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </Link>
-                <button className="border-2 border-white text-white hover:bg-white/10 px-8 py-4 rounded-lg font-semibold text-lg transition-all backdrop-blur-sm">
-                  Watch Demo Video
-                </button>
               </div>
 
               {/* Key Benefits */}
@@ -350,9 +347,6 @@ export default function AssessifyLanding() {
                 <ArrowRight className="w-5 h-5" />
               </button>
             </Link>
-            <button className="border-2 border-white text-white hover:bg-white/10 px-8 py-4 rounded-lg font-bold text-lg transition-all backdrop-blur-sm">
-              Schedule a Demo
-            </button>
           </div>
           <p className="text-gray-100 mt-6">✓ No credit card required  ✓ Quick setup  ✓ 24/7 support</p>
         </div>

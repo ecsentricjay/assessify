@@ -109,7 +109,6 @@ export default async function StudentDashboard() {
                 <div>
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-2xl">AI Assignment Writer</CardTitle>
-                    <Badge className="bg-primary text-primary-foreground">NEW</Badge>
                   </div>
                   <CardDescription className="text-base mt-1">
                     Generate high-quality academic assignments with AI assistance
@@ -154,7 +153,7 @@ export default async function StudentDashboard() {
                 <div className="space-y-1 mb-4">
                   <p className="text-sm font-medium text-muted-foreground">Pricing</p>
                   <p className="text-2xl font-bold text-primary">₦100</p>
-                  <p className="text-xs text-muted-foreground">per 1-2000 words</p>
+                  <p className="text-xs text-muted-foreground">per 1-1000 words</p>
                 </div>
                 <Link href="/student/assignment-writer">
                   <Button className="w-full" size="lg">
@@ -201,6 +200,19 @@ export default async function StudentDashboard() {
                   </Button>
                 </Link>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <CardHeader>
+              <div className="text-4xl mb-2">📋</div>
+              <CardTitle>My Submissions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 mb-4">View submission history and spending</p>
+              <Link href="/student/submissions">
+                <Button className="w-full">View Submissions</Button>
+              </Link>
             </CardContent>
           </Card>
 

@@ -11,6 +11,8 @@ export interface FinancialReport {
   netRevenue: number
   platformEarnings: number
   lecturerEarnings: number
+  partnerEarnings: number
+  aiAssignmentRevenue: number
   totalTransactions: number
   averageTransactionValue: number
 }
@@ -40,6 +42,7 @@ export interface RevenueByPeriod {
 
 /**
  * Get comprehensive financial report
+ * ✅ FIXED: Correct revenue calculations for 50/35/15 split
  */
 export async function getFinancialReport(params?: {
   startDate?: string
@@ -51,40 +54,105 @@ export async function getFinancialReport(params?: {
 
     const { startDate, endDate } = params || {}
 
-    // Build date filter
-    let dateFilter = {}
-    if (startDate) {
-      dateFilter = { ...dateFilter, gte: startDate }
-    }
-    if (endDate) {
-      const endDateTime = new Date(endDate)
-      endDateTime.setDate(endDateTime.getDate() + 1)
-      dateFilter = { ...dateFilter, lt: endDateTime.toISOString() }
-    }
-
-    // Get all transactions
-    let txQuery = supabase.from('transactions').select('*')
+    // Get payment transactions (DEBIT = student payments)
+    let paymentQuery = supabase
+      .from('transactions')
+      .select('amount, purpose')
+      .in('purpose', ['assignment_payment', 'test_payment', 'ai_assignment'])
+      .eq('type', 'debit')
+      .eq('status', 'completed')
     
-    if (startDate) txQuery = txQuery.gte('created_at', startDate)
+    if (startDate) paymentQuery = paymentQuery.gte('created_at', startDate)
     if (endDate) {
       const endDateTime = new Date(endDate)
       endDateTime.setDate(endDateTime.getDate() + 1)
-      txQuery = txQuery.lt('created_at', endDateTime.toISOString())
+      paymentQuery = paymentQuery.lt('created_at', endDateTime.toISOString())
     }
 
-    const { data: transactions } = await txQuery
+    const { data: paymentTransactions } = await paymentQuery
 
-    // Calculate financial metrics
-    const credits = transactions?.filter(t => t.type === 'credit' && t.status === 'completed') || []
-    const debits = transactions?.filter(t => t.type === 'debit' && t.status === 'completed') || []
+    // Calculate revenue by source
+    const totalRevenue = paymentTransactions?.reduce((sum, t) => sum + t.amount, 0) || 0
+    
+    const aiRevenue = paymentTransactions?.filter(t => t.purpose === 'ai_assignment')
+      .reduce((sum, t) => sum + t.amount, 0) || 0
+    
+    const submissionRevenue = paymentTransactions?.filter(t => 
+      t.purpose === 'assignment_payment' || t.purpose === 'test_payment'
+    ).reduce((sum, t) => sum + t.amount, 0) || 0
 
-    const totalRevenue = credits.reduce((sum, t) => sum + t.amount, 0)
-    const totalWithdrawals = debits.filter(t => t.purpose === 'withdrawal').reduce((sum, t) => sum + t.amount, 0)
-    const totalRefunds = credits.filter(t => t.purpose === 'refund').reduce((sum, t) => sum + t.amount, 0)
+    // Get withdrawals
+    let withdrawalQuery = supabase
+      .from('transactions')
+      .select('amount')
+      .eq('purpose', 'withdrawal')
+      .eq('type', 'debit')
+      .eq('status', 'completed')
 
-    // Platform earnings (30% of revenue minus refunds)
-    const platformEarnings = (totalRevenue * 0.30) - totalRefunds
-    const lecturerEarnings = totalRevenue * 0.70
+    if (startDate) withdrawalQuery = withdrawalQuery.gte('created_at', startDate)
+    if (endDate) {
+      const endDateTime = new Date(endDate)
+      endDateTime.setDate(endDateTime.getDate() + 1)
+      withdrawalQuery = withdrawalQuery.lt('created_at', endDateTime.toISOString())
+    }
+
+    const { data: withdrawals } = await withdrawalQuery
+    const totalWithdrawals = withdrawals?.reduce((sum, t) => sum + t.amount, 0) || 0
+
+    // Get refunds
+    let refundQuery = supabase
+      .from('transactions')
+      .select('amount')
+      .eq('purpose', 'refund')
+      .eq('type', 'credit')
+      .eq('status', 'completed')
+
+    if (startDate) refundQuery = refundQuery.gte('created_at', startDate)
+    if (endDate) {
+      const endDateTime = new Date(endDate)
+      endDateTime.setDate(endDateTime.getDate() + 1)
+      refundQuery = refundQuery.lt('created_at', endDateTime.toISOString())
+    }
+
+    const { data: refunds } = await refundQuery
+    const totalRefunds = refunds?.reduce((sum, t) => sum + t.amount, 0) || 0
+
+    // Get partner commissions
+    let partnerQuery = supabase
+      .from('partner_earnings')
+      .select('amount')
+
+    if (startDate) partnerQuery = partnerQuery.gte('created_at', startDate)
+    if (endDate) {
+      const endDateTime = new Date(endDate)
+      endDateTime.setDate(endDateTime.getDate() + 1)
+      partnerQuery = partnerQuery.lt('created_at', endDateTime.toISOString())
+    }
+
+    const { data: partnerEarningsData } = await partnerQuery
+    const partnerEarnings = partnerEarningsData?.reduce((sum, e) => sum + e.amount, 0) || 0
+
+    // ✅ CORRECT CALCULATIONS FOR 50/35/15 SPLIT:
+    // Split: Platform 50%, Lecturer 35%, Partner 15%
+    
+    // Lecturers: 35% of submissions
+    const lecturerEarnings = Math.round(submissionRevenue * 0.35)
+    
+    // Platform: 100% AI + 50% submissions
+    // (Partner 15% is separate and doesn't reduce platform's 50%)
+    const platformEarnings = Math.round(aiRevenue + (submissionRevenue * 0.50))
+    
+    // Partner: 15% of submissions (already calculated from partner_earnings table)
+    // partnerEarnings is already correct
+
+    console.log('📊 Revenue Calculation:')
+    console.log('  Total Revenue:', totalRevenue)
+    console.log('  AI Revenue:', aiRevenue)
+    console.log('  Submission Revenue:', submissionRevenue)
+    console.log('  Platform (50% + AI):', platformEarnings)
+    console.log('  Lecturer (35%):', lecturerEarnings)
+    console.log('  Partner (15%):', partnerEarnings)
+    console.log('  Verification:', platformEarnings + lecturerEarnings + partnerEarnings, '= Total Revenue:', totalRevenue)
 
     const report: FinancialReport = {
       totalRevenue,
@@ -93,8 +161,10 @@ export async function getFinancialReport(params?: {
       netRevenue: totalRevenue - totalWithdrawals - totalRefunds,
       platformEarnings,
       lecturerEarnings,
-      totalTransactions: transactions?.length || 0,
-      averageTransactionValue: transactions?.length ? totalRevenue / transactions.length : 0
+      partnerEarnings,
+      aiAssignmentRevenue: aiRevenue,
+      totalTransactions: paymentTransactions?.length || 0,
+      averageTransactionValue: paymentTransactions?.length ? totalRevenue / paymentTransactions.length : 0
     }
 
     return {
@@ -118,7 +188,6 @@ export async function getUserReport() {
     await requireAdmin()
     const supabase = await createClient()
 
-    // Get all profiles
     const { data: profiles } = await supabase
       .from('profiles')
       .select('role, created_at, is_active')
@@ -129,7 +198,6 @@ export async function getUserReport() {
     const admins = profiles?.filter(p => p.role === 'admin').length || 0
     const activeUsers = profiles?.filter(p => p.is_active).length || 0
 
-    // New users this month
     const thisMonthStart = new Date()
     thisMonthStart.setDate(1)
     thisMonthStart.setHours(0, 0, 0, 0)
@@ -168,7 +236,6 @@ export async function getContentReport() {
     await requireAdmin()
     const supabase = await createClient()
 
-    // Get counts
     const [coursesRes, assignmentsRes, testsRes, submissionsRes] = await Promise.all([
       supabase.from('courses').select('*', { count: 'exact', head: true }),
       supabase.from('assignments').select('*', { count: 'exact', head: true }),
@@ -176,7 +243,6 @@ export async function getContentReport() {
       supabase.from('assignment_submissions').select('final_score')
     ])
 
-    // Calculate average grade
     const scores = submissionsRes.data?.filter(s => s.final_score !== null).map(s => s.final_score) || []
     const averageGrade = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0
 
@@ -217,8 +283,9 @@ export async function getRevenueByPeriod(params?: {
 
     let query = supabase
       .from('transactions')
-      .select('created_at, amount, type, status')
-      .eq('type', 'credit')
+      .select('created_at, amount, purpose')
+      .in('purpose', ['assignment_payment', 'test_payment', 'ai_assignment'])
+      .eq('type', 'debit')
       .eq('status', 'completed')
 
     if (startDate) query = query.gte('created_at', startDate)
@@ -237,7 +304,6 @@ export async function getRevenueByPeriod(params?: {
       }
     }
 
-    // Group transactions by period
     const grouped = new Map<string, { revenue: number; transactions: number }>()
 
     transactions.forEach(tx => {
@@ -288,6 +354,7 @@ export async function getTopLecturers(limit = 10) {
     await requireAdmin()
     const supabase = await createClient()
 
+    // Get ALL lecturer earnings (regardless of withdrawn status)
     const { data: earnings } = await supabase
       .from('lecturer_earnings')
       .select(`
@@ -303,25 +370,35 @@ export async function getTopLecturers(limit = 10) {
       }
     }
 
-    // Group by lecturer
+    console.log('📊 Raw lecturer earnings data:', earnings)
+
+    // Group by lecturer and sum ALL earnings
     const lecturerMap = new Map<string, { name: string; avatar: string | null; total: number }>()
 
     earnings.forEach((earning: any) => {
       const existing = lecturerMap.get(earning.lecturer_id) || {
-        name: `${earning.profiles?.first_name} ${earning.profiles?.last_name}`,
+        name: `${earning.profiles?.first_name || ''} ${earning.profiles?.last_name || ''}`.trim(),
         avatar: earning.profiles?.avatar_url || null,
         total: 0
       }
+      
       lecturerMap.set(earning.lecturer_id, {
         ...existing,
-        total: existing.total + earning.amount
+        total: existing.total + Number(earning.amount)
       })
     })
 
     const lecturers = Array.from(lecturerMap.entries())
-      .map(([id, data]) => ({ id, ...data }))
+      .map(([id, data]) => ({ 
+        id, 
+        name: data.name,
+        avatar: data.avatar,
+        total: data.total
+      }))
       .sort((a, b) => b.total - a.total)
       .slice(0, limit)
+
+    console.log('📊 Processed top lecturers:', lecturers)
 
     return {
       success: true,
@@ -358,6 +435,8 @@ export async function exportReportToCSV(reportType: 'financial' | 'users' | 'con
         ['Net Revenue', `₦${result.report.netRevenue.toLocaleString()}`],
         ['Platform Earnings', `₦${result.report.platformEarnings.toLocaleString()}`],
         ['Lecturer Earnings', `₦${result.report.lecturerEarnings.toLocaleString()}`],
+        ['Partner Earnings', `₦${result.report.partnerEarnings.toLocaleString()}`],
+        ['AI Assignment Revenue', `₦${result.report.aiAssignmentRevenue.toLocaleString()}`],
         ['Total Transactions', result.report.totalTransactions.toString()],
         ['Average Transaction Value', `₦${result.report.averageTransactionValue.toLocaleString()}`]
       ]

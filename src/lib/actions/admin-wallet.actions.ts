@@ -269,19 +269,24 @@ export async function getUserTransactions(userId: string, limit = 20) {
   }
 }
 
+// Just replace the getAllWallets function in src/lib/actions/admin-wallet.actions.ts
+// with this updated version:
+
 /**
  * Get all wallets with user information
+ * ✅ FIXED: Now includes partner earnings
  */
 export async function getAllWallets(params?: {
   search?: string
   page?: number
   limit?: number
+  role?: string
 }) {
   try {
     await requireAdmin()
     const supabase = await createClient()
     
-    const { search = '', page = 1, limit = 20 } = params || {}
+    const { search = '', page = 1, limit = 20, role } = params || {}
     
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -311,7 +316,7 @@ export async function getAllWallets(params?: {
 
     if (error) throw error
 
-    // Filter by search if provided (since we can't use .or() on joined tables easily)
+    // Filter by search if provided
     let filteredData = data
     if (search && data) {
       filteredData = data.filter((wallet: any) => {
@@ -322,11 +327,58 @@ export async function getAllWallets(params?: {
       })
     }
 
-    // Transform data to match WalletWithUser interface
-    const transformedWallets: WalletWithUser[] = (filteredData || []).map((wallet: any) => ({
-      ...wallet,
-      profiles: Array.isArray(wallet.profiles) ? wallet.profiles[0] : wallet.profiles
-    }))
+    // Filter by role if provided
+    if (role && role !== 'all' && filteredData) {
+      filteredData = filteredData.filter((wallet: any) => {
+        const profile = Array.isArray(wallet.profiles) ? wallet.profiles[0] : wallet.profiles
+        return profile?.role === role
+      })
+    }
+
+    // ✅ Transform and enrich with partner earnings
+    const transformedWallets: WalletWithUser[] = await Promise.all(
+      (filteredData || []).map(async (wallet: any) => {
+        const profile = Array.isArray(wallet.profiles) ? wallet.profiles[0] : wallet.profiles
+        
+        // ✅ For partners, get their earnings
+        if (profile?.role === 'partner') {
+          const { data: partnerData } = await supabase
+            .from('partners')
+            .select('id')
+            .eq('user_id', wallet.user_id)
+            .single()
+
+          if (partnerData) {
+            const { data: earnings } = await supabase
+              .from('partner_earnings')
+              .select('amount, status')
+              .eq('partner_id', partnerData.id)
+
+            const totalEarned = earnings?.reduce((sum, e) => sum + e.amount, 0) || 0
+            const withdrawn = earnings?.filter(e => e.status === 'withdrawn')
+              .reduce((sum, e) => sum + e.amount, 0) || 0
+            const pending = earnings?.filter(e => e.status === 'pending')
+              .reduce((sum, e) => sum + e.amount, 0) || 0
+
+            return {
+              ...wallet,
+              profiles: profile,
+              partner_stats: {
+                total_earned: totalEarned,
+                withdrawn,
+                pending,
+                available: pending
+              }
+            }
+          }
+        }
+
+        return {
+          ...wallet,
+          profiles: profile
+        }
+      })
+    )
 
     // Calculate total balance
     const { data: totalData } = await supabase
@@ -338,7 +390,7 @@ export async function getAllWallets(params?: {
     return {
       success: true,
       wallets: transformedWallets,
-      total: search ? filteredData.length : (count || 0),
+      total: search || role ? filteredData.length : (count || 0),
       totalBalance,
       page,
       limit

@@ -297,13 +297,13 @@ export default function FinancialReportsClient({
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-600 font-medium">Platform Share (30%)</p>
+                  <p className="text-sm text-blue-600 font-medium">Platform Share (50-65%)</p>
                   <p className="text-xl font-bold text-blue-700">
                     ₦{financialReport.platformEarnings.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                  <p className="text-sm text-purple-600 font-medium">Lecturer Share (70%)</p>
+                  <p className="text-sm text-purple-600 font-medium">Lecturer Share (35%)</p>
                   <p className="text-xl font-bold text-purple-700">
                     ₦{financialReport.lecturerEarnings.toLocaleString()}
                   </p>

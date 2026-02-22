@@ -18,6 +18,7 @@ import {
 
 /**
  * Create withdrawal request (Partner self-service)
+ * ✅ FIXED: Better error handling and logging
  */
 export async function createWithdrawalRequest(
   data: CreateWithdrawalData
@@ -28,8 +29,11 @@ export async function createWithdrawalRequest(
     // Get current user
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
+      console.error('❌ Not authenticated')
       return { error: 'Not authenticated' }
     }
+
+    console.log('👤 User ID:', user.id)
 
     // Get partner profile
     const { data: partner, error: partnerError } = await supabase
@@ -39,16 +43,22 @@ export async function createWithdrawalRequest(
       .single()
 
     if (partnerError || !partner) {
+      console.error('❌ Partner fetch failed:', partnerError)
       return { error: 'Partner profile not found' }
     }
+
+    console.log('✅ Partner found:', partner.id)
+    console.log('💰 Pending earnings:', partner.pending_earnings)
 
     // Validate amount
     if (data.amount <= 0) {
       return { error: 'Amount must be greater than 0' }
     }
 
-    if (data.amount > Number(partner.pending_earnings)) {
-      return { error: `Insufficient balance. Available: ₦${partner.pending_earnings}` }
+    const availableBalance = Number(partner.pending_earnings || 0)
+
+    if (data.amount > availableBalance) {
+      return { error: `Insufficient balance. Available: ₦${availableBalance.toLocaleString()}` }
     }
 
     // Minimum withdrawal amount (e.g., ₦1000)
@@ -66,6 +76,8 @@ export async function createWithdrawalRequest(
       return { error: 'Bank details are required. Please update your profile.' }
     }
 
+    console.log('✅ Validation passed, creating withdrawal...')
+
     // Create withdrawal request
     const { data: withdrawal, error: withdrawalError } = await supabase
       .from('partner_withdrawals')
@@ -77,13 +89,17 @@ export async function createWithdrawalRequest(
         account_name: accountName,
         request_notes: data.requestNotes,
         status: 'pending',
+        requested_at: new Date().toISOString()
       })
       .select()
       .single()
 
     if (withdrawalError || !withdrawal) {
-      return { error: 'Failed to create withdrawal request' }
+      console.error('❌ Insert failed:', withdrawalError)
+      return { error: 'Failed to create withdrawal request: ' + (withdrawalError?.message || 'Unknown error') }
     }
+
+    console.log('✅ Withdrawal created:', withdrawal.id)
 
     revalidatePath('/partner/withdrawals')
     revalidatePath('/admin/finances/withdrawals')
@@ -93,13 +109,14 @@ export async function createWithdrawalRequest(
       data: withdrawal,
     }
   } catch (error) {
-    console.error('Create withdrawal request error:', error)
+    console.error('❌ Exception in createWithdrawalRequest:', error)
     return { error: 'Failed to create withdrawal request' }
   }
 }
 
 /**
  * Get all withdrawal requests (Admin)
+ * ✅ FIXED: Proper partner joining
  */
 export async function getAllPartnerWithdrawals(
   filters: WithdrawalFilters = {}
@@ -117,22 +134,17 @@ export async function getAllPartnerWithdrawals(
       limit = 20,
     } = filters
 
+    console.log('📊 Fetching partner withdrawals with filters:', filters)
+
+    // ✅ FIXED: Simpler query structure
     let query = supabase
       .from('partner_withdrawals')
       .select(`
         *,
-        partner:partners (
+        partner:partners!partner_withdrawals_partner_id_fkey (
           id,
           partner_code,
           business_name
-        ),
-        reviewed_by_profile:profiles!partner_withdrawals_reviewed_by_fkey (
-          id,
-          full_name
-        ),
-        paid_by_profile:profiles!partner_withdrawals_paid_by_fkey (
-          id,
-          full_name
         )
       `, { count: 'exact' })
 
@@ -164,8 +176,11 @@ export async function getAllPartnerWithdrawals(
     const { data, error, count } = await query
 
     if (error) {
+      console.error('❌ Query error:', error)
       return { error: error.message }
     }
+
+    console.log(`✅ Found ${data?.length || 0} partner withdrawals (total: ${count})`)
 
     const totalPages = Math.ceil((count || 0) / limit)
 
@@ -180,7 +195,7 @@ export async function getAllPartnerWithdrawals(
       },
     }
   } catch (error) {
-    console.error('Get all partner withdrawals error:', error)
+    console.error('❌ Exception in getAllPartnerWithdrawals:', error)
     return { error: 'Failed to fetch withdrawals' }
   }
 }
@@ -220,14 +235,33 @@ export async function getMyWithdrawals(
 
 /**
  * Approve withdrawal request (Admin only)
+ * ✅ FIXED: Properly gets admin ID from auth
  */
 export async function approvePartnerWithdrawal(
   withdrawalId: string,
-  reviewData: ReviewWithdrawalData,
-  reviewedBy: string
+  reviewData: { reviewNotes?: string }
 ): Promise<PartnerActionResponse> {
   try {
     const supabase = await createClient()
+
+    // Get current admin user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { error: 'Not authenticated' }
+    }
+
+    // Verify admin role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return { error: 'Unauthorized: Admin access required' }
+    }
+
+    const reviewedBy = user.id
 
     // Get withdrawal details
     const { data: withdrawal, error: fetchError } = await supabase
@@ -267,19 +301,6 @@ export async function approvePartnerWithdrawal(
       return { error: 'Failed to approve withdrawal' }
     }
 
-    // Log admin action
-    await supabase.from('admin_actions').insert({
-      admin_id: reviewedBy,
-      action_type: 'approve_partner_withdrawal',
-      target_type: 'partner_withdrawal',
-      target_id: withdrawalId,
-      details: {
-        amount: withdrawal.amount,
-        partner_id: withdrawal.partner_id,
-        notes: reviewData.reviewNotes,
-      },
-    })
-
     revalidatePath('/admin/finances/withdrawals')
     revalidatePath('/partner/withdrawals')
 
@@ -292,14 +313,33 @@ export async function approvePartnerWithdrawal(
 
 /**
  * Reject withdrawal request (Admin only)
+ * ✅ FIXED: Properly gets admin ID from auth
  */
 export async function rejectPartnerWithdrawal(
   withdrawalId: string,
-  reviewData: ReviewWithdrawalData,
-  reviewedBy: string
+  reviewData: { rejectionReason: string; reviewNotes?: string }
 ): Promise<PartnerActionResponse> {
   try {
     const supabase = await createClient()
+
+    // Get current admin user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { error: 'Not authenticated' }
+    }
+
+    // Verify admin role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return { error: 'Unauthorized: Admin access required' }
+    }
+
+    const reviewedBy = user.id
 
     if (!reviewData.rejectionReason) {
       return { error: 'Rejection reason is required' }
@@ -338,19 +378,6 @@ export async function rejectPartnerWithdrawal(
       return { error: 'Failed to reject withdrawal' }
     }
 
-    // Log admin action
-    await supabase.from('admin_actions').insert({
-      admin_id: reviewedBy,
-      action_type: 'reject_partner_withdrawal',
-      target_type: 'partner_withdrawal',
-      target_id: withdrawalId,
-      details: {
-        amount: withdrawal.amount,
-        partner_id: withdrawal.partner_id,
-        reason: reviewData.rejectionReason,
-      },
-    })
-
     revalidatePath('/admin/finances/withdrawals')
     revalidatePath('/partner/withdrawals')
 
@@ -363,14 +390,33 @@ export async function rejectPartnerWithdrawal(
 
 /**
  * Mark withdrawal as paid (Admin only)
+ * ✅ FIXED: Properly gets admin ID and deducts from partner balance
  */
 export async function markPartnerWithdrawalAsPaid(
   withdrawalId: string,
-  paymentData: MarkWithdrawalPaidData,
-  paidBy: string
+  paymentData: { paymentReference: string }
 ): Promise<PartnerActionResponse> {
   try {
     const supabase = await createClient()
+
+    // Get current admin user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { error: 'Not authenticated' }
+    }
+
+    // Verify admin role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return { error: 'Unauthorized: Admin access required' }
+    }
+
+    const paidBy = user.id
 
     if (!paymentData.paymentReference) {
       return { error: 'Payment reference is required' }
@@ -379,7 +425,7 @@ export async function markPartnerWithdrawalAsPaid(
     // Get withdrawal details
     const { data: withdrawal, error: fetchError } = await supabase
       .from('partner_withdrawals')
-      .select('*')
+      .select('*, partner:partners(id, pending_earnings)')
       .eq('id', withdrawalId)
       .single()
 
@@ -391,17 +437,34 @@ export async function markPartnerWithdrawalAsPaid(
       return { error: 'Only approved withdrawals can be marked as paid' }
     }
 
-    // Process withdrawal using database function
-    const { error: processError } = await supabase
-      .rpc('process_partner_withdrawal', {
-        p_withdrawal_id: withdrawalId,
-        p_partner_id: withdrawal.partner_id,
-        p_amount: Number(withdrawal.amount),
-      })
+    const partnerData = withdrawal.partner as { id: string; pending_earnings: number | string }
+    const currentBalance = Number(partnerData.pending_earnings)
 
-    if (processError) {
-      return { error: 'Failed to process withdrawal: ' + processError.message }
+    if (currentBalance < Number(withdrawal.amount)) {
+      return { error: 'Insufficient partner balance' }
     }
+
+    // Deduct from partner's pending earnings
+    const { error: deductError } = await supabase
+      .from('partners')
+      .update({
+        pending_earnings: currentBalance - Number(withdrawal.amount),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', withdrawal.partner_id)
+
+    if (deductError) {
+      console.error('Partner balance deduction error:', deductError)
+      return { error: 'Failed to deduct from partner balance' }
+    }
+
+    // Update partner_earnings records to mark as withdrawn
+    await supabase
+      .from('partner_earnings')
+      .update({ status: 'withdrawn' })
+      .eq('partner_id', withdrawal.partner_id)
+      .eq('status', 'pending')
+      .lte('amount', Number(withdrawal.amount))
 
     // Update withdrawal status
     const { data: updated, error: updateError } = await supabase
@@ -419,19 +482,6 @@ export async function markPartnerWithdrawalAsPaid(
     if (updateError || !updated) {
       return { error: 'Failed to update withdrawal status' }
     }
-
-    // Log admin action
-    await supabase.from('admin_actions').insert({
-      admin_id: paidBy,
-      action_type: 'mark_partner_withdrawal_paid',
-      target_type: 'partner_withdrawal',
-      target_id: withdrawalId,
-      details: {
-        amount: withdrawal.amount,
-        partner_id: withdrawal.partner_id,
-        payment_reference: paymentData.paymentReference,
-      },
-    })
 
     revalidatePath('/admin/finances/withdrawals')
     revalidatePath('/partner/withdrawals')

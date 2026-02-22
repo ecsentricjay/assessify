@@ -25,9 +25,10 @@ export async function sendWelcomeEmail(
 ) {
   try {
     // Partners go directly to login, others to their dashboard
+    const baseUrl = 'https://assessify.ng'
     const dashboardUrl = role === 'partner' 
-      ? `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
-      : `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
+      ? `${baseUrl}/auth/login`
+      : `${baseUrl}/auth/login`
 
     const html = (await render(
       WelcomeEmail({
@@ -62,7 +63,8 @@ export async function sendPartnerCredentialsEmail(
   partnerCode: string
 ) {
   try {
-    const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/login`
+    const baseUrl = 'https://assessify.ng'
+    const loginUrl = `${baseUrl}/auth/login`
 
     const html = (await render(
       PartnerCredentialsEmail({

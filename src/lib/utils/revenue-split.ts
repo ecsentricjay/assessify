@@ -31,15 +31,15 @@ export async function calculateRevenueSplit(
 ): Promise<RevenueSplitResult> {
   const supabase = await createClient()
 
-  // Default split: Lecturer 50%, Platform 50% (no partner)
+  // Default split: Lecturer 35%, Platform 65% (no partner)
   const defaultSplit: RevenueSplitResult = {
     hasPartner: false,
     partnerId: null,
     referralId: null,
     commissionRate: 0,
-    lecturerAmount: submissionAmount * 0.5,
+    lecturerAmount: submissionAmount * 0.35,
     partnerAmount: 0,
-    platformAmount: submissionAmount * 0.5,
+    platformAmount: submissionAmount * 0.65,
   }
 
   try {
@@ -53,11 +53,11 @@ export async function calculateRevenueSplit(
       return defaultSplit
     }
 
-    // Has partner: Lecturer 50%, Partner 15%, Platform 35%
+    // Has partner: Lecturer 35%, Partner 15%, Platform 50%
     const commissionRate = Number((partnerInfo as PartnerInfo).commission_rate) || 15
-    const lecturerAmount = submissionAmount * 0.5
+    const lecturerAmount = submissionAmount * 0.35
     const partnerAmount = submissionAmount * (commissionRate / 100)
-    const platformAmount = submissionAmount - lecturerAmount - partnerAmount
+    const platformAmount = submissionAmount * 0.50
 
     return {
       hasPartner: true,
@@ -84,7 +84,7 @@ export function formatRevenueSplit(split: RevenueSplitResult, totalAmount: numbe
       {
         recipient: 'Lecturer',
         amount: split.lecturerAmount,
-        percentage: 50,
+        percentage: 35,
       },
       ...(split.hasPartner
         ? [
@@ -98,7 +98,7 @@ export function formatRevenueSplit(split: RevenueSplitResult, totalAmount: numbe
       {
         recipient: 'Platform',
         amount: split.platformAmount,
-        percentage: split.hasPartner ? 35 : 50,
+        percentage: split.hasPartner ? 50 : 65,
       },
     ],
   }

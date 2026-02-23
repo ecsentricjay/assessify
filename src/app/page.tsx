@@ -1,17 +1,22 @@
+'use client';
+
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { CheckCircle, BarChart3, Users, Zap, ArrowRight, Star, Shield, Clock, BookOpen, GraduationCap, TrendingUp, Award } from 'lucide-react';
+import { CheckCircle, BarChart3, Users, Zap, ArrowRight, Star, Shield, Clock, BookOpen, GraduationCap, TrendingUp, Award, Menu, X } from 'lucide-react';
 import { FooterContent } from '@/components/footer/footer-content';
 
 export default function AssessifyLanding() {
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      {/* Navigation Bar */}
+      {/* Navigation Bar - FIXED FOR MOBILE */}
       <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-[#E5E7EB] z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
+            {/* Logo - Fixed size on mobile */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Image
                 src="/images/logo/assessify-logo-icon.png"
                 alt="Assessify Logo"
@@ -19,26 +24,83 @@ export default function AssessifyLanding() {
                 height={32}
                 className="rounded"
               />
-              <span className="text-xl font-bold text-[#1F2A5A]">ASSESSIFY</span>
+              <span className="text-lg sm:text-xl font-bold text-[#1F2A5A]">ASSESSIFY</span>
             </div>
+
+            {/* Desktop Navigation - Hidden on mobile */}
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors">Features</a>
               <a href="#how-it-works" className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors">How It Works</a>
               <a href="#contact" className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors">Contact</a>
             </div>
-            <div className="flex items-center gap-4">
+
+            {/* Desktop Action Buttons - Hidden on mobile */}
+            <div className="hidden md:flex items-center gap-4">
               <Link href="/auth/login">
                 <button className="text-[#1F2A5A] hover:text-[#2563EB] font-medium transition-colors">
                   Login
                 </button>
               </Link>
               <Link href="/auth/signup">
-                <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-2 rounded-lg font-medium transition-colors whitespace-nowrap">
                   Get Started Free
                 </button>
               </Link>
             </div>
+
+            {/* Mobile Action Buttons - Compact version */}
+            <div className="flex md:hidden items-center gap-2">
+              <Link href="/auth/login">
+                <button className="text-[#1F2A5A] hover:text-[#2563EB] font-medium transition-colors text-sm px-3 py-1.5">
+                  Login
+                </button>
+              </Link>
+              <Link href="/auth/signup">
+                <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-3 py-1.5 rounded-lg font-medium transition-colors text-sm whitespace-nowrap">
+                  Sign Up
+                </button>
+              </Link>
+            </div>
+
+            {/* Mobile Menu Button - Hidden for now since we have inline buttons */}
+            {/* Uncomment if you want a hamburger menu instead
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-[#1F2A5A]"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            */}
           </div>
+
+          {/* Mobile Menu Dropdown - Optional */}
+          {mobileMenuOpen && (
+            <div className="md:hidden py-4 border-t border-[#E5E7EB]">
+              <div className="flex flex-col gap-4">
+                <a 
+                  href="#features" 
+                  className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Features
+                </a>
+                <a 
+                  href="#how-it-works" 
+                  className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  How It Works
+                </a>
+                <a 
+                  href="#contact" 
+                  className="text-[#6B7280] hover:text-[#1F2A5A] transition-colors py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Contact
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
@@ -62,42 +124,43 @@ export default function AssessifyLanding() {
                 <span className="text-sm font-medium">Built for Nigerian Institutions</span>
               </div>
 
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
+              {/* Mobile-optimized heading sizes */}
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
                 Revolutionizing Academic Assessment in Nigeria
               </h1>
 
-              <p className="text-xl text-gray-100 leading-relaxed max-w-xl">
+              <p className="text-lg sm:text-xl text-gray-100 leading-relaxed max-w-xl">
                 The first AI-powered continuous assessment platform built specifically for Nigerian universities and polytechnics. Automate grading, track performance, and elevate educational outcomes.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link href="/auth/signup">
-                  <button className="group bg-white text-[#1F2A5A] hover:bg-gray-50 px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center gap-2 shadow-xl">
+                  <button className="group bg-white text-[#1F2A5A] hover:bg-gray-50 px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center gap-2 shadow-xl w-full sm:w-auto">
                     Get Started Free
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </Link>
               </div>
 
-              {/* Key Benefits */}
-              <div className="flex flex-wrap gap-4 pt-8 border-t border-white/20">
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <Shield className="w-5 h-5 text-[#38D4E5]" />
-                  <span className="text-sm">Bank-Level Security</span>
+              {/* Key Benefits - Responsive grid */}
+              <div className="flex flex-wrap gap-3 sm:gap-4 pt-8 border-t border-white/20">
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 sm:px-4 py-2 rounded-lg">
+                  <Shield className="w-4 sm:w-5 h-4 sm:h-5 text-[#38D4E5] flex-shrink-0" />
+                  <span className="text-xs sm:text-sm whitespace-nowrap">Bank-Level Security</span>
                 </div>
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <Zap className="w-5 h-5 text-[#38D4E5]" />
-                  <span className="text-sm">Lightning Fast</span>
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 sm:px-4 py-2 rounded-lg">
+                  <Zap className="w-4 sm:w-5 h-4 sm:h-5 text-[#38D4E5] flex-shrink-0" />
+                  <span className="text-xs sm:text-sm whitespace-nowrap">Lightning Fast</span>
                 </div>
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <Clock className="w-5 h-5 text-[#38D4E5]" />
-                  <span className="text-sm">Save 80% Grading Time</span>
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 sm:px-4 py-2 rounded-lg">
+                  <Clock className="w-4 sm:w-5 h-4 sm:h-5 text-[#38D4E5] flex-shrink-0" />
+                  <span className="text-xs sm:text-sm whitespace-nowrap">Save 80% Time</span>
                 </div>
               </div>
             </div>
 
-            {/* Right Image - Hero Dashboard Preview */}
-            <div className="relative">
+            {/* Right Image - Hero Dashboard Preview - Hidden on small mobile */}
+            <div className="relative hidden sm:block">
               <div className="absolute inset-0 bg-gradient-to-br from-[#38D4E5]/30 to-[#2563EB]/30 rounded-3xl blur-3xl"></div>
               <div className="relative bg-white rounded-2xl shadow-2xl p-8 space-y-6">
                 {/* Mock Dashboard */}
@@ -150,7 +213,7 @@ export default function AssessifyLanding() {
                         <div className="text-xs text-[#6B7280]">120 students enrolled</div>
                       </div>
                     </div>
-                    <Award className="w-5 h-5 text-[#F59E0B]" />
+                    <div className="text-xs bg-[#DCFCE7] text-[#16A34A] px-2 py-1 rounded">Ready</div>
                   </div>
                 </div>
               </div>
@@ -159,77 +222,49 @@ export default function AssessifyLanding() {
         </div>
       </section>
 
-      {/* Problem & Solution Section */}
-      <section className="py-24 bg-white">
+      {/* Why Choose Assessify */}
+      <section className="py-16 sm:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
-              Why Nigerian Educators Choose Assessify
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
+              Why Trust Us
             </h2>
-            <p className="text-xl text-[#6B7280] max-w-3xl mx-auto">
-              We understand the unique challenges facing Nigerian tertiary institutions
+            <p className="text-lg sm:text-xl text-[#6B7280] max-w-3xl mx-auto">
+              Purpose-built for the Nigerian educational ecosystem
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-16">
-            {/* Problems */}
-            <div className="space-y-6">
-              <div className="inline-block bg-[#FEE2E2] text-[#DC2626] px-4 py-2 rounded-lg font-semibold mb-4">
-                Traditional Challenges
+          <div className="space-y-4 sm:space-y-6">
+            {[
+              { icon: "🎯", text: "Designed for Nigerian Grading Standards (0-100 system, CA weightings)" },
+              { icon: "💰", text: "Affordable pricing in Naira with local payment options" },
+              { icon: "⚡", text: "Works seamlessly even with unstable internet connections" },
+              { icon: "🔒", text: "Bank-level security compliant with Nigerian data protection laws" },
+              { icon: "📱", text: "Mobile-first design for students and lecturers on-the-go" },
+              { icon: "🇳🇬", text: "24/7 support team based in Nigeria who understand your needs" }
+            ].map((item, idx) => (
+              <div key={idx} className="flex items-start gap-3 sm:gap-4 p-4 bg-[#DCFCE7]/50 rounded-lg border-l-4 border-[#16A34A]">
+                <span className="text-xl sm:text-2xl flex-shrink-0">{item.icon}</span>
+                <p className="text-[#1F2A5A] text-base sm:text-lg font-medium pt-1">{item.text}</p>
               </div>
-              <div className="space-y-4">
-                {[
-                  { icon: "⏰", text: "Hours spent manually grading hundreds of scripts" },
-                  { icon: "📄", text: "Plagiarism goes undetected without proper tools" },
-                  { icon: "📊", text: "Complex CA calculations prone to human error" },
-                  { icon: "🔍", text: "Limited visibility into student performance trends" },
-                  { icon: "💸", text: "Expensive commercial solutions not built for Nigeria" }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-4 p-4 bg-[#FEE2E2]/30 rounded-lg">
-                    <span className="text-2xl">{item.icon}</span>
-                    <p className="text-[#1F2A5A] text-lg pt-1">{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Solutions */}
-            <div className="space-y-6">
-              <div className="inline-block bg-[#DCFCE7] text-[#16A34A] px-4 py-2 rounded-lg font-semibold mb-4">
-                The Assessify Solution
-              </div>
-              <div className="space-y-4">
-                {[
-                  { icon: "🤖", text: "AI-powered grading cuts workload by 80%" },
-                  { icon: "🛡️", text: "Advanced plagiarism detection with detailed reports" },
-                  { icon: "⚡", text: "Automated CA computation with zero errors" },
-                  { icon: "📈", text: "Real-time analytics and performance dashboards" },
-                  { icon: "🇳🇬", text: "Affordable pricing designed for Nigerian institutions" }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-4 p-4 bg-[#DCFCE7]/50 rounded-lg border-l-4 border-[#16A34A]">
-                    <span className="text-2xl">{item.icon}</span>
-                    <p className="text-[#1F2A5A] text-lg font-medium pt-1">{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 bg-[#F5F7FA]">
+      <section id="features" className="py-16 sm:py-24 bg-[#F5F7FA]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
               Everything You Need to Excel
             </h2>
-            <p className="text-xl text-[#6B7280] max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-[#6B7280] max-w-3xl mx-auto">
               Comprehensive tools designed for the Nigerian educational ecosystem
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {[
               {
                 icon: <Zap className="w-8 h-8" />,
@@ -268,15 +303,15 @@ export default function AssessifyLanding() {
                 benefits: ["Real-time metrics", "Export reports", "Predictive analytics"]
               }
             ].map((feature, idx) => (
-              <div key={idx} className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 group">
-                <div className="w-16 h-16 bg-gradient-to-br from-[#2563EB] to-[#38D4E5] rounded-xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
+              <div key={idx} className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm hover:shadow-xl transition-all duration-300 group">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-[#2563EB] to-[#38D4E5] rounded-xl flex items-center justify-center text-white mb-4 sm:mb-6 group-hover:scale-110 transition-transform">
                   {feature.icon}
                 </div>
-                <h3 className="text-xl font-bold text-[#1F2A5A] mb-3">{feature.title}</h3>
-                <p className="text-[#6B7280] mb-6">{feature.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-[#1F2A5A] mb-3">{feature.title}</h3>
+                <p className="text-sm sm:text-base text-[#6B7280] mb-4 sm:mb-6">{feature.description}</p>
                 <ul className="space-y-2">
                   {feature.benefits.map((benefit, bidx) => (
-                    <li key={bidx} className="flex items-center gap-2 text-sm text-[#6B7280]">
+                    <li key={bidx} className="flex items-center gap-2 text-xs sm:text-sm text-[#6B7280]">
                       <CheckCircle className="w-4 h-4 text-[#16A34A] flex-shrink-0" />
                       <span>{benefit}</span>
                     </li>
@@ -289,19 +324,19 @@ export default function AssessifyLanding() {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="py-24 bg-white">
+      <section id="how-it-works" className="py-16 sm:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#1F2A5A] mb-4">
               Simple. Intuitive. Powerful.
             </h2>
-            <p className="text-xl text-[#6B7280] max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-[#6B7280] max-w-3xl mx-auto">
               Get started in minutes, not weeks
             </p>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-8 relative">
-            {/* Connection Line */}
+          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-8 relative">
+            {/* Connection Line - Hidden on mobile */}
             <div className="hidden md:block absolute top-12 left-0 right-0 h-0.5 bg-gradient-to-r from-[#2563EB] via-[#38D4E5] to-[#2563EB] opacity-20"></div>
 
             {[
@@ -311,18 +346,18 @@ export default function AssessifyLanding() {
               { step: "04", title: "Auto-Grade & Analyze", desc: "AI grades submissions and generates insights instantly" }
             ].map((item, idx) => (
               <div key={idx} className="text-center relative">
-                <div className="w-24 h-24 bg-gradient-to-br from-[#2563EB] to-[#38D4E5] text-white rounded-2xl flex items-center justify-center text-2xl font-bold mx-auto mb-6 shadow-lg relative z-10">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-[#2563EB] to-[#38D4E5] text-white rounded-2xl flex items-center justify-center text-xl sm:text-2xl font-bold mx-auto mb-4 sm:mb-6 shadow-lg relative z-10">
                   {item.step}
                 </div>
-                <h3 className="font-bold text-[#1F2A5A] text-lg mb-2">{item.title}</h3>
+                <h3 className="font-bold text-[#1F2A5A] text-base sm:text-lg mb-2">{item.title}</h3>
                 <p className="text-[#6B7280] text-sm">{item.desc}</p>
               </div>
             ))}
           </div>
 
-          <div className="text-center mt-12">
+          <div className="text-center mt-8 sm:mt-12">
             <Link href="/auth/signup">
-              <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all inline-flex items-center gap-2">
+              <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all inline-flex items-center gap-2 w-full sm:w-auto justify-center">
                 Get Started Now
                 <ArrowRight className="w-5 h-5" />
               </button>
@@ -332,23 +367,23 @@ export default function AssessifyLanding() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 bg-gradient-to-br from-[#2563EB] to-[#38D4E5]">
+      <section className="py-16 sm:py-24 bg-gradient-to-br from-[#2563EB] to-[#38D4E5]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-white">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6">
             Ready to Transform Your Assessment Process?
           </h2>
-          <p className="text-xl text-gray-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-lg sm:text-xl text-gray-100 mb-8 max-w-2xl mx-auto">
             Experience the future of academic assessment. Start using Assessify today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/auth/signup">
-              <button className="bg-white text-[#2563EB] hover:bg-gray-50 px-8 py-4 rounded-lg font-bold text-lg transition-all shadow-xl inline-flex items-center justify-center gap-2">
+              <button className="bg-white text-[#2563EB] hover:bg-gray-50 px-8 py-4 rounded-lg font-bold text-lg transition-all shadow-xl inline-flex items-center justify-center gap-2 w-full sm:w-auto">
                 Get Started
                 <ArrowRight className="w-5 h-5" />
               </button>
             </Link>
           </div>
-          <p className="text-gray-100 mt-6">✓ No credit card required  ✓ Quick setup  ✓ 24/7 support</p>
+          <p className="text-gray-100 mt-6 text-sm sm:text-base">✓ No credit card required  ✓ Quick setup  ✓ 24/7 support</p>
         </div>
       </section>
 

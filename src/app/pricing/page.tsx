@@ -7,90 +7,70 @@ import { CheckCircle, X, ArrowRight } from 'lucide-react';
 import { FooterContent } from '@/components/footer/footer-content';
 
 export default function PricingPage() {
-  const plans = [
+  const { TrendingUp } = require('lucide-react');
+  const pricingModel = [
     {
-      name: 'Starter',
-      description: 'Perfect for individual educators',
-      price: 'Free',
-      priceSubtitle: 'Basic features',
-      features: [
-        { name: 'Up to 5 assessments', included: true },
-        { name: 'Up to 50 students', included: true },
-        { name: 'Basic grading', included: true },
-        { name: 'Limited analytics', included: true },
-        { name: 'Email support', included: true },
-        { name: 'AI-powered grading', included: false },
-        { name: 'Advanced analytics', included: false },
-        { name: 'Priority support', included: false },
-        { name: 'Custom workflows', included: false },
-      ],
-      cta: 'Get Started',
-      highlight: false
+      title: 'Assignment Submission',
+      description: 'Students pay per submission',
+      fee: '₦200',
+      unit: 'per 1-1000 words',
+      details: [
+        'Deducted from student wallet',
+        'Full plagiarism scanning included',
+        'AI or lecturer grading',
+        'Instant feedback provided'
+      ]
     },
     {
-      name: 'Professional',
-      description: 'For active educators and small institutions',
-      price: '$29',
-      priceSubtitle: '/month',
-      features: [
-        { name: 'Unlimited assessments', included: true },
-        { name: 'Up to 500 students', included: true },
-        { name: 'AI-powered grading', included: true },
-        { name: 'Advanced analytics', included: true },
-        { name: 'Priority email support', included: true },
-        { name: 'Custom grading rubrics', included: true },
-        { name: 'Assessment templates', included: true },
-        { name: 'Data export', included: true },
-        { name: 'Custom workflows', included: false },
-      ],
-      cta: 'Start Free Trial',
-      highlight: true
+      title: 'Test Attempt',
+      description: 'Fixed platform rate per attempt',
+      fee: '₦200',
+      unit: 'per attempt',
+      details: [
+        'Platform-set pricing',
+        'All question types supported',
+        'Auto-grading enabled',
+        'Instant results to students'
+      ]
     },
     {
-      name: 'Enterprise',
-      description: 'For large institutions and organizations',
-      price: 'Custom',
-      priceSubtitle: 'Contact for pricing',
-      features: [
-        { name: 'Unlimited everything', included: true },
-        { name: 'Unlimited students', included: true },
-        { name: 'AI-powered grading', included: true },
-        { name: 'Advanced analytics', included: true },
-        { name: '24/7 phone & chat support', included: true },
-        { name: 'Custom integrations', included: true },
-        { name: 'Dedicated account manager', included: true },
-        { name: 'Custom workflows', included: true },
-        { name: 'SLA guarantee', included: true },
-      ],
-      cta: 'Contact Sales',
-      highlight: false
+      title: 'AI Assignment Writer',
+      description: 'Draft assistance premium feature',
+      fee: '₦100',
+      unit: 'per 1-1000 words',
+      details: [
+        'AI-powered draft generation',
+        'Plagiarism verification included',
+        'Promotes academic integrity',
+        'Optional learning tool'
+      ]
     }
   ];
 
   const faqs = [
     {
-      question: 'Can I try Assessify before purchasing?',
-      answer: 'Yes! All paid plans come with a 14-day free trial. No credit card required. You\'ll have full access to all features during the trial period.'
+      question: 'How do students pay for submissions?',
+      answer: 'Students top up their wallet via Paystack using debit cards or bank transfers. When they submit an assignment or take a test, the fee is automatically deducted from their wallet balance.'
     },
     {
-      question: 'Is there a discount for annual billing?',
-      answer: 'Yes! We offer a 20% discount when you pay annually instead of monthly. Contact our sales team for more details.'
+      question: 'What is included with assignment submission?',
+      answer: 'Assignment submission includes plagiarism scanning, AI or lecturer grading, and detailed feedback. All features are included in the ₦200 fee per submission.'
     },
     {
-      question: 'What happens to my data if I cancel?',
-      answer: 'Your data remains yours. You can export all your assessments, grades, and analytics at any time before or after cancellation.'
+      question: 'What is the AI Assignment Writer?',
+      answer: 'The AI Assignment Writer is an optional premium feature (₦100 per 1-1000 words) that helps students brainstorm and draft assignments. It promotes ethical academic practices with originality verification.'
     },
     {
-      question: 'Do you offer discounts for educational institutions?',
-      answer: 'Absolutely! We provide special pricing for schools and universities. Contact our education team to discuss volume discounts and institutional pricing.'
+      question: 'Are test attempt costs set by lecturers?',
+      answer: 'No, test attempt costs are fixed by the platform at ₦200 per attempt. This ensures consistent pricing across all institutions.'
     },
     {
-      question: 'Can I change my plan anytime?',
-      answer: 'Yes, you can upgrade, downgrade, or cancel your plan anytime. Changes take effect immediately, and we\'ll prorate your billing accordingly.'
+      question: 'Can I get a refund?',
+      answer: 'Refunds are available for failed transactions or technical issues. Contact our support team within 48 hours of the transaction for assistance.'
     },
     {
-      question: 'What payment methods do you accept?',
-      answer: 'We accept credit cards (Visa, Mastercard, American Express), bank transfers, and purchase orders for enterprise customers.'
+      question: 'What payment methods do you support?',
+      answer: 'We support Paystack for wallet top-ups (debit cards, bank transfers) and direct bank transfers for bulk institutional accounts.'
     }
   ];
 
@@ -131,103 +111,33 @@ export default function PricingPage() {
         <div className="max-w-4xl mx-auto text-center text-white">
           <h1 className="text-4xl md:text-5xl font-bold mb-6">Simple, Transparent Pricing</h1>
           <p className="text-lg md:text-xl opacity-90">
-            Choose the plan that fits your needs. Start free, upgrade when you\'re ready.
+            Only pay for what you use. No subscriptions, no hidden fees.
           </p>
         </div>
       </section>
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-16">
-        {/* Pricing Tiers */}
+        {/* Pricing Model */}
         <section className="mb-20">
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
-            {plans.map((plan, index) => (
-              <div
-                key={index}
-                className={`rounded-2xl overflow-hidden transition-all ${
-                  plan.highlight
-                    ? 'bg-gradient-to-br from-[#2563EB] to-[#38D4E5] text-white shadow-2xl md:scale-105'
-                    : 'bg-white border border-[#E5E7EB] hover:shadow-lg'
-                }`}
-              >
-                <div className={`p-8 ${plan.highlight ? 'bg-black/10' : ''}`}>
-                  {plan.highlight && (
-                    <div className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full inline-block mb-4">
-                      MOST POPULAR
-                    </div>
-                  )}
-                  <h3 className={`text-2xl font-bold mb-2 ${plan.highlight ? 'text-white' : 'text-[#1F2A5A]'}`}>
-                    {plan.name}
-                  </h3>
-                  <p className={`text-sm mb-6 ${plan.highlight ? 'text-white/80' : 'text-[#6B7280]'}`}>
-                    {plan.description}
-                  </p>
-                  <div className="mb-6">
-                    <div className={`text-4xl font-bold ${plan.highlight ? 'text-white' : 'text-[#1F2A5A]'}`}>
-                      {plan.price}
-                    </div>
-                    <p className={`text-sm ${plan.highlight ? 'text-white/80' : 'text-[#6B7280]'}`}>
-                      {plan.priceSubtitle}
-                    </p>
-                  </div>
-                  <Link href="/auth/signup">
-                    <button
-                      className={`w-full py-3 rounded-lg font-semibold transition-colors mb-8 ${
-                        plan.highlight
-                          ? 'bg-white text-[#2563EB] hover:bg-gray-100'
-                          : 'bg-[#2563EB] text-white hover:bg-[#1D4ED8]'
-                      }`}
-                    >
-                      {plan.cta}
-                    </button>
-                  </Link>
+          <h2 className="text-3xl font-bold text-[#1F2A5A] text-center mb-12">Our Pricing</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {pricingModel.map((plan, index) => (
+              <div key={index} className="bg-white border border-[#E5E7EB] rounded-xl p-6 hover:shadow-lg transition-shadow">
+                <h3 className="text-lg font-bold text-[#1F2A5A] mb-2">{plan.title}</h3>
+                <p className="text-sm text-[#6B7280] mb-3">{plan.description}</p>
+                <div className="bg-gradient-to-br from-[#2563EB]/10 to-[#38D4E5]/10 rounded-lg p-4 mb-4">
+                  <p className="text-3xl font-bold text-[#2563EB]">{plan.fee}</p>
+                  <p className="text-xs text-[#6B7280] mt-1">{plan.unit}</p>
                 </div>
-
-                <div className={`px-8 pb-8 ${plan.highlight ? 'bg-white/5' : ''}`}>
-                  <div className="space-y-4">
-                    {plan.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-start gap-3">
-                        {feature.included ? (
-                          <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-white' : 'text-[#2563EB]'}`} />
-                        ) : (
-                          <X className={`w-5 h-5 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-white/40' : 'text-[#D1D5DB]'}`} />
-                        )}
-                        <span
-                          className={`text-sm ${
-                            feature.included
-                              ? plan.highlight
-                                ? 'text-white'
-                                : 'text-[#1F2A5A]'
-                              : plan.highlight
-                                ? 'text-white/60'
-                                : 'text-[#9CA3AF]'
-                          }`}
-                        >
-                          {feature.name}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* What\'s Included */}
-        <section className="mb-20 bg-[#F9FAFB] rounded-2xl p-12">
-          <h2 className="text-3xl font-bold text-[#1F2A5A] text-center mb-12">What\'s Included in All Plans</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { title: 'Secure Cloud Storage', description: 'Enterprise-grade security for all your data' },
-              { title: 'Mobile Access', description: 'Full functionality on any device' },
-              { title: 'Regular Updates', description: 'Continuous improvements and new features' },
-              { title: 'Data Export', description: 'Download your data anytime in standard formats' }
-            ].map((item, index) => (
-              <div key={index} className="bg-white p-6 rounded-lg border border-[#E5E7EB]">
-                <CheckCircle className="w-6 h-6 text-[#2563EB] mb-3" />
-                <h3 className="font-semibold text-[#1F2A5A] mb-2">{item.title}</h3>
-                <p className="text-sm text-[#6B7280]">{item.description}</p>
+                <ul className="space-y-2">
+                  {plan.details.map((detail, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-[#6B7280]">
+                      <CheckCircle className="w-4 h-4 text-[#2563EB] flex-shrink-0 mt-0.5" />
+                      {detail}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
@@ -249,28 +159,15 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* Enterprise CTA */}
-        <section className="mb-12 bg-gradient-to-r from-[#1F2A5A] to-[#2563EB] rounded-2xl p-12 text-center text-white">
-          <h2 className="text-3xl font-bold mb-4">Need Custom Solutions?</h2>
-          <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Our Enterprise plan offers unlimited everything plus dedicated support, custom integrations, and SLA guarantees. Perfect for large institutions.
-          </p>
-          <Link href="/contact">
-            <button className="bg-white text-[#2563EB] hover:bg-gray-100 px-8 py-3 rounded-lg font-semibold transition-colors">
-              Contact Our Sales Team
-            </button>
-          </Link>
-        </section>
-
         {/* CTA */}
-        <section className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-6">Ready to Get Started?</h2>
+        <section className="text-center">
+          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-6">Ready to Transform Your Assessment Process?</h2>
           <p className="text-[#6B7280] text-lg mb-8 max-w-2xl mx-auto">
-            Join thousands of educators using Assessify to transform their assessment process. No credit card required for the free plan.
+            Join thousands of educators and institutions using Assessify. Only pay for what you use—no hidden fees, no subscriptions.
           </p>
           <Link href="/auth/signup">
             <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-8 py-3 rounded-lg font-semibold transition-colors">
-              Start Your Free Trial
+              Get Started Now
             </button>
           </Link>
         </section>

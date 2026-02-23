@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { BookOpen, Play, Download, ArrowRight, ChevronDown, CheckCircle } from 'lucide-react';
+import { BookOpen, ArrowRight, ChevronDown, CheckCircle, AlertCircle, Brain, Zap, Users } from 'lucide-react';
 import { FooterContent } from '@/components/footer/footer-content';
 
 export default function GuidesPage() {
@@ -131,13 +131,6 @@ export default function GuidesPage() {
     }
   ];
 
-  const videoTutorials = [
-    { title: 'Dashboard Overview', duration: '3 min', category: 'Beginner' },
-    { title: 'Creating Your First Test', duration: '5 min', category: 'Beginner' },
-    { title: 'AI Grading Explained', duration: '7 min', category: 'Intermediate' },
-    { title: 'Advanced Reporting', duration: '8 min', category: 'Advanced' }
-  ];
-
   return (
     <div className="flex flex-col min-h-screen bg-white">
       {/* Navigation */}
@@ -250,14 +243,6 @@ export default function GuidesPage() {
                         </li>
                       ))}
                     </ol>
-                    <div className="mt-6 flex gap-4">
-                      <button className="flex items-center gap-2 text-[#2563EB] font-semibold hover:text-[#1D4ED8]">
-                        <Download className="w-4 h-4" /> Download Guide
-                      </button>
-                      <button className="flex items-center gap-2 text-[#2563EB] font-semibold hover:text-[#1D4ED8]">
-                        <Play className="w-4 h-4" /> Watch Video
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>
@@ -265,39 +250,14 @@ export default function GuidesPage() {
           </div>
         </section>
 
-        {/* Video Tutorials */}
+        {/* FAQs */}
         <section className="mb-20">
-          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-8">Video Tutorials</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {videoTutorials.map((video, index) => (
-              <div key={index} className="bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] p-6 hover:shadow-lg transition-shadow">
-                <div className="bg-gradient-to-br from-[#2563EB] to-[#38D4E5] rounded-lg h-32 flex items-center justify-center mb-4">
-                  <Play className="w-12 h-12 text-white" />
-                </div>
-                <h3 className="font-bold text-[#1F2A5A] mb-2">{video.title}</h3>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#6B7280]">{video.duration}</span>
-                  <span className={`px-2 py-1 text-xs font-medium rounded ${
-                    video.category === 'Beginner' ? 'bg-green-100 text-green-700' :
-                    video.category === 'Intermediate' ? 'bg-blue-100 text-blue-700' :
-                    'bg-purple-100 text-purple-700'
-                  }`}>
-                    {video.category}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* FAQ-Style Help */}
-        <section className="mb-20">
-          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-8">Quick Answers</h2>
+          <h2 className="text-2xl font-bold text-[#1F2A5A] mb-8">Frequently Asked Questions</h2>
           <div className="grid md:grid-cols-2 gap-6">
             {[
               { q: 'How do I reset my password?', a: 'Click "Forgot Password" on the login page and follow the email instructions.' },
-              { q: 'Can I use Assessify offline?', a: 'Assessify is cloud-based, but offline capabilities are available for enterprise plans.' },
-              { q: 'Is there a mobile app?', a: 'Yes, mobile apps are available for iOS and Android with full functionality.' },
+              { q: 'Can I use Assessify offline?', a: 'No, Assessify is a cloud-based application and cannot be accessed offline. You need an active internet connection to use the platform.' },
+              { q: 'Is there a mobile app?', a: 'We currently offer a mobile-friendly web app optimized for tablets and smartphones. You can access Assessify on any device with a web browser.' },
               { q: 'How is my data backed up?', a: 'All data is automatically backed up daily with multiple redundancies.' },
               { q: 'Can I import questions from my system?', a: 'Yes, we support imports from common formats like Excel, CSV, and QTI.' },
               { q: 'What support is available?', a: '24/7 email, chat, and phone support for all Assessify users.' }

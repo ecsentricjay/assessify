@@ -4,81 +4,68 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
-  Zap, Brain, BarChart3, Lock, Users, TrendingUp, Workflow, 
-  AlertCircle, CheckCircle, Clock, BookOpen, Award, ArrowRight 
+  Brain, FileText, Lock, Users, Zap, BarChart3, 
+  AlertCircle, CheckCircle, Workflow, TrendingUp
 } from 'lucide-react';
 import { FooterContent } from '@/components/footer/footer-content';
 
 export default function FeaturesPage() {
   const features = [
     {
+      icon: FileText,
+      title: 'Assignment Submission System',
+      description: 'Students submit assignments with customizable rubrics, multiple file format support, and instant feedback from AI or lecturers.',
+      highlights: ['Multiple file formats', 'Custom rubrics', 'Instant feedback', 'Resubmission tracking']
+    },
+    {
       icon: Brain,
       title: 'AI-Powered Grading',
-      description: 'Leverage advanced machine learning algorithms to grade assignments with consistency and precision. Reduce grading time by up to 70% while improving accuracy.',
-      benefits: ['Consistent evaluation', 'Reduced bias', 'Instant feedback']
+      description: 'Automatic grading using Claude AI and Gemini with detailed feedback, confidence scoring, and option for manual override.',
+      highlights: ['Auto-essay grading', 'Confidence scoring', 'Detailed feedback', 'Manual review option']
     },
     {
-      icon: BarChart3,
-      title: 'Advanced Analytics',
-      description: 'Comprehensive dashboards and reports show detailed performance metrics, learning trends, and actionable insights for every student and class.',
-      benefits: ['Real-time insights', 'Performance tracking', 'Learning trends']
+      icon: AlertCircle,
+      title: 'Plagiarism Detection',
+      description: 'Real-time plagiarism scanning against web sources, institutional database, and student\'s own past work.',
+      highlights: ['Real-time scanning', 'Source identification', 'Similarity reports', 'Highlighted matches']
     },
     {
-      icon: Users,
-      title: 'Collaborative Tools',
-      description: 'Enable seamless collaboration between educators, students, and administrators with built-in communication and feedback systems.',
-      benefits: ['Instant feedback', 'Two-way communication', 'Team management']
+      icon: Zap,
+      title: 'Test & Quiz System',
+      description: 'Support for 9+ question types including MCQ, essays, true/false, matching, fill-in-the-blank, short answer, ordering, and more.',
+      highlights: ['9+ question types', 'Auto-grading', 'Randomized questions', 'Question banking']
     },
     {
       icon: Lock,
-      title: 'Enterprise Security',
-      description: 'Bank-level security with end-to-end encryption, role-based access control, and regular security audits to protect sensitive educational data.',
-      benefits: ['Data encryption', 'Access control', 'Compliance ready']
+      title: 'Wallet & Payment System',
+      description: 'Integrated wallet for students to fund submissions, lecturers to earn commissions, and partners to track earnings. Paystack integration included.',
+      highlights: ['Student top-ups', 'Lecturer earnings', 'Partner commissions (15%)', 'Paystack integration']
+    },
+    {
+      icon: BarChart3,
+      title: 'Analytics & Reporting',
+      description: 'Comprehensive dashboards for students, lecturers, and admins showing performance trends, engagement, earnings, and institutional metrics.',
+      highlights: ['Performance trends', 'Earnings tracking', 'Student insights', 'Institutional reports']
+    },
+    {
+      icon: Users,
+      title: 'Multi-User Roles',
+      description: 'Support for students, lecturers, admins, and partner institutions with role-based access control and customized dashboards.',
+      highlights: ['Role-based access', 'Custom dashboards', 'Permission control', 'Audit logs']
     },
     {
       icon: Workflow,
-      title: 'Automated Workflows',
-      description: 'Streamline assessment processes with customizable workflows, automated grading, and intelligent question banking.',
-      benefits: ['Save time', 'Reduce manual work', 'Increase efficiency']
-    },
-    {
-      icon: TrendingUp,
-      title: 'Performance Insights',
-      description: 'Deep-dive analytics that help identify struggling students, track progress over time, and predict future performance.',
-      benefits: ['Early intervention', 'Progress tracking', 'Predictive analytics']
+      title: 'AI Assignment Writer',
+      description: 'Students can use AI to help draft assignments. Lecturers can monitor AI-assisted work and verify authenticity.',
+      highlights: ['Draft assistance', 'AI transparency', 'Originality checking', 'Learning enhancement']
     }
   ];
 
   const detailedFeatures = [
     {
-      title: 'Smart Question Bank',
-      description: 'Build and manage a comprehensive question repository with intelligent categorization, difficulty levels, and auto-suggested learning materials.',
-      icon: BookOpen
-    },
-    {
-      title: 'Multi-Format Support',
-      description: 'Support for multiple question types including MCQ, essays, coding challenges, and multimedia assessments.',
-      icon: Workflow
-    },
-    {
-      title: 'Real-Time Notifications',
-      description: 'Instant alerts and notifications keep all stakeholders informed about submissions, grades, and important milestones.',
-      icon: AlertCircle
-    },
-    {
-      title: 'Customizable Reports',
-      description: 'Generate detailed reports tailored to your needs - from individual student progress to institution-wide analytics.',
-      icon: BarChart3
-    },
-    {
-      title: 'Mobile Access',
-      description: 'Access Assessify anywhere with our fully responsive mobile app. Manage assessments on the go.',
-      icon: Zap
-    },
-    {
-      title: 'API Integration',
-      description: 'Integrate Assessify with your existing systems through our robust REST API and webhook support.',
-      icon: Users
+      title: 'What You Can Do',
+      description: '',
+      icon: null
     }
   ];
 
@@ -142,10 +129,10 @@ export default function FeaturesPage() {
                   <h3 className="text-xl font-bold text-[#1F2A5A] mb-3">{feature.title}</h3>
                   <p className="text-[#6B7280] mb-4 leading-relaxed">{feature.description}</p>
                   <div className="space-y-2">
-                    {feature.benefits.map((benefit, i) => (
+                    {feature.highlights.map((item: string, i: number) => (
                       <div key={i} className="flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-[#2563EB]" />
-                        <span className="text-sm text-[#6B7280]">{benefit}</span>
+                        <span className="text-sm text-[#6B7280]">{item}</span>
                       </div>
                     ))}
                   </div>
@@ -156,69 +143,52 @@ export default function FeaturesPage() {
         </section>
 
         {/* Detailed Features */}
-        <section className="mb-20">
-          <h2 className="text-3xl md:text-4xl font-bold text-[#1F2A5A] mb-12">Additional Features</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {detailedFeatures.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div key={index} className="p-6 bg-[#F0F4FF] rounded-lg border border-[#E5E7EB] hover:bg-[#E0F2FE] transition-colors">
-                  <Icon className="w-8 h-8 text-[#2563EB] mb-3" />
-                  <h3 className="font-bold text-[#1F2A5A] mb-2">{feature.title}</h3>
-                  <p className="text-[#6B7280] text-sm">{feature.description}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Benefits Overview */}
-        <section className="mb-20 bg-gradient-to-r from-[#1F2A5A] to-[#2563EB] rounded-lg p-12 text-white">
-          <h2 className="text-3xl font-bold mb-8">Why Choose Assessify?</h2>
+        <section className="mb-20 bg-gradient-to-r from-[#1F2A5A] to-[#2563EB] rounded-2xl p-12 text-white">
+          <h2 className="text-3xl font-bold mb-8">What You Can Do</h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">Up to 70% Time Savings</h3>
-                  <p className="text-gray-200 text-sm">Automate grading and reduce manual workload significantly</p>
+                  <h3 className="font-bold mb-1">Automated Grading</h3>
+                  <p className="text-gray-200 text-sm">AI grades essays against your rubric in seconds with detailed feedback</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">Unbiased Grading</h3>
-                  <p className="text-gray-200 text-sm">AI ensures consistent and fair evaluation for all students</p>
+                  <h3 className="font-bold mb-1">Plagiarism Checking</h3>
+                  <p className="text-gray-200 text-sm">Automatic plagiarism detection on every submission with detailed reports</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">Better Insights</h3>
-                  <p className="text-gray-200 text-sm">Data-driven analytics help identify learning gaps early</p>
+                  <h3 className="font-bold mb-1">Multiple Question Types</h3>
+                  <p className="text-gray-200 text-sm">Support for 9+ question types from essays to MCQ to matching questions</p>
                 </div>
               </div>
             </div>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">Enhanced Security</h3>
-                  <p className="text-gray-200 text-sm">Enterprise-grade security protects all educational data</p>
+                  <h3 className="font-bold mb-1">Payment Processing</h3>
+                  <p className="text-gray-200 text-sm">Integrated wallets and Paystack for handling submission fees</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">Scalable Solution</h3>
-                  <p className="text-gray-200 text-sm">Grows with your institution from classrooms to campuses</p>
+                  <h3 className="font-bold mb-1">Performance Analytics</h3>
+                  <p className="text-gray-200 text-sm">Real-time dashboards for students, lecturers, and administrators</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <ArrowRight className="w-6 h-6 flex-shrink-0 mt-1" />
+                <CheckCircle className="w-6 h-6 flex-shrink-0 mt-1" />
                 <div>
-                  <h3 className="font-bold mb-1">24/7 Support</h3>
-                  <p className="text-gray-200 text-sm">Dedicated team ready to help whenever you need it</p>
+                  <h3 className="font-bold mb-1">Partner Commissions</h3>
+                  <p className="text-gray-200 text-sm">Earn 15% commission on every submission from lecturers you refer</p>
                 </div>
               </div>
             </div>
@@ -227,13 +197,13 @@ export default function FeaturesPage() {
 
         {/* CTA Section */}
         <section className="text-center">
-          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-4">Ready to Experience These Features?</h2>
+          <h2 className="text-3xl font-bold text-[#1F2A5A] mb-4">Ready to Get Started?</h2>
           <p className="text-[#6B7280] text-lg mb-8 max-w-2xl mx-auto">
-            Start with a free account and discover how Assessify can transform your assessment process.
+            Create an account and start using Assessify\'s powerful features today.
           </p>
           <Link href="/auth/signup">
-            <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-8 py-3 rounded-lg font-bold transition-colors inline-flex items-center gap-2">
-              Get Started Free <ArrowRight className="w-5 h-5" />
+            <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-8 py-3 rounded-lg font-bold transition-colors">
+              Get Started Now
             </button>
           </Link>
         </section>

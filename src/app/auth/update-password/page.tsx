@@ -55,8 +55,8 @@ export default function UpdatePasswordPage() {
       <nav className="border-b border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2 group">
-              <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#1F2A5A] transition-colors" />
+            <Link href="/" className="flex items-center gap-2 group flex-shrink-0">
+              <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#1F2A5A] transition-colors flex-shrink-0" />
               <Image
                 src="/images/logo/assessify-logo-icon.png"
                 alt="Assessify"
@@ -64,7 +64,7 @@ export default function UpdatePasswordPage() {
                 height={32}
                 className="rounded"
               />
-              <span className="text-xl font-bold text-[#1F2A5A]">ASSESSIFY</span>
+              <span className="text-lg sm:text-xl font-bold text-[#1F2A5A]">ASSESSIFY</span>
             </Link>
           </div>
         </div>

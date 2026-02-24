@@ -75,7 +75,7 @@ export default function FeaturesPage() {
       <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-[#E5E7EB] z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <Image
                 src="/images/logo/assessify-logo-icon.png"
                 alt="Assessify Logo"
@@ -85,7 +85,7 @@ export default function FeaturesPage() {
               />
               <span className="text-lg sm:text-xl font-bold text-[#1F2A5A]">ASSESSIFY</span>
             </Link>
-            <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-4">
               <Link href="/auth/login">
                 <button className="text-[#1F2A5A] hover:text-[#2563EB] font-medium transition-colors">
                   Login
@@ -93,7 +93,19 @@ export default function FeaturesPage() {
               </Link>
               <Link href="/auth/signup">
                 <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-2 rounded-lg font-medium transition-colors">
-                  Get Started Free
+                  Get Started
+                </button>
+              </Link>
+            </div>
+            <div className="flex md:hidden items-center gap-2">
+              <Link href="/auth/login">
+                <button className="text-[#1F2A5A] hover:text-[#2563EB] font-medium transition-colors text-sm px-3 py-1.5">
+                  Login
+                </button>
+              </Link>
+              <Link href="/auth/signup">
+                <button className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-3 py-1.5 rounded-lg font-medium transition-colors text-sm whitespace-nowrap">
+                  Sign Up
                 </button>
               </Link>
             </div>

@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Sparkles, Copy, Wallet, AlertCircle, Loader2, CheckCircle, Clock, Eye, Trash2, RefreshCw, Download } from 'lucide-react';
+import { Sparkles, Copy, Wallet, AlertCircle, Loader2, CheckCircle, Clock, Eye, Trash2, RefreshCw, Download, FileText } from 'lucide-react';
 import { FormattedAssignmentContent } from './formatted-assignment-content';
 import {
   Dialog,
@@ -68,6 +68,7 @@ export default function AssignmentWriterClient({
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [viewingAssignment, setViewingAssignment] = useState<AIAssignment | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Update cost estimate when word count changes
   useEffect(() => {
@@ -192,7 +193,7 @@ export default function AssignmentWriterClient({
     }
   };
 
-  const handleDownload = (content: string, filename: string) => {
+  const handleDownloadTxt = (content: string, filename: string) => {
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -202,7 +203,55 @@ export default function AssignmentWriterClient({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Assignment downloaded');
+    toast.success('Assignment downloaded as TXT');
+  };
+
+  // ✅ NEW: Download as DOCX
+  const handleDownloadDocx = async (content: string, filename: string, metadata?: {
+    courseName?: string;
+    courseOfStudy?: string;
+    citationStyle?: string;
+    wordCount?: number;
+  }) => {
+    setIsDownloading(true);
+    try {
+      // Call API endpoint to generate DOCX
+      const response = await fetch('/api/student/download-assignment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          filename,
+          metadata,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate document');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Download the file
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Assignment downloaded as DOCX');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to download DOCX. Please try TXT format instead.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -244,7 +293,7 @@ export default function AssignmentWriterClient({
                 <li>• ₦300 for 2001-3000 words (and so on...)</li>
                 <li>• Each assignment is unique and plagiarism-free</li>
                 <li>• Proper academic citations are included</li>
-                <li>• All previous assignments are saved in your history</li>
+                <li>• Download as TXT or DOCX format</li>
               </ul>
             </div>
           </div>
@@ -358,7 +407,14 @@ export default function AssignmentWriterClient({
                 className="w-full"
                 size="lg"
                 onClick={handleGenerate}
-                disabled={isGenerating || balance < estimatedCost}
+                disabled={
+                  isGenerating || 
+                  !question || 
+                  parseFloat(String(wordCount)) > balance ||
+                  parseFloat(String(wordCount)) < 100 ||
+                  !courseOfStudy.trim() ||
+                  !courseName.trim()
+                }
               >
                 {isGenerating ? (
                   <>
@@ -400,10 +456,32 @@ export default function AssignmentWriterClient({
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={() => handleDownload(generatedContent, `assignment-${Date.now()}`)}
+                      onClick={() => handleDownloadTxt(generatedContent, `assignment-${Date.now()}`)}
                     >
                       <Download className="h-4 w-4 mr-2" />
-                      Download
+                      TXT
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleDownloadDocx(
+                        generatedContent, 
+                        `${courseName}-${Date.now()}`,
+                        {
+                          courseName,
+                          courseOfStudy,
+                          citationStyle,
+                          wordCount: actualWordCount
+                        }
+                      )}
+                      disabled={isDownloading}
+                    >
+                      {isDownloading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 mr-2" />
+                      )}
+                      DOCX
                     </Button>
                     <Button variant="outline" size="sm" onClick={handleReset}>
                       Reset
@@ -553,13 +631,35 @@ export default function AssignmentWriterClient({
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => viewingAssignment && handleDownload(
+              onClick={() => viewingAssignment && handleDownloadTxt(
                 viewingAssignment.generated_content,
                 `${viewingAssignment.course_name}-${Date.now()}`
               )}
             >
               <Download className="h-4 w-4 mr-2" />
-              Download
+              TXT
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => viewingAssignment && handleDownloadDocx(
+                viewingAssignment.generated_content,
+                `${viewingAssignment.course_name}-${Date.now()}`,
+                {
+                  courseName: viewingAssignment.course_name,
+                  courseOfStudy: viewingAssignment.course_of_study,
+                  citationStyle: viewingAssignment.citation_style,
+                  wordCount: viewingAssignment.actual_word_count
+                }
+              )}
+              disabled={isDownloading}
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              DOCX
             </Button>
             <Button
               variant="outline"

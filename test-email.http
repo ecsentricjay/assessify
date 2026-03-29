@@ -1,0 +1,26 @@
+### Test Simple Email
+POST http://localhost:3000/api/test-email
+Content-Type: application/json
+
+{
+  "to": "nwaogujusticeu@gmail.com",
+  "type": "simple"
+}
+
+### Test Welcome Email
+POST http://localhost:3000/api/test-email
+Content-Type: application/json
+
+{
+  "to": "nwaogujusticeu@gmail.com",
+  "type": "welcome"
+}
+
+### Test Password Reset Email
+POST http://localhost:3000/api/test-email
+Content-Type: application/json
+
+{
+  "to": "nwaogujusticeu@gmail.com",
+  "type": "reset"
+}

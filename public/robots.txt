@@ -1,0 +1,55 @@
+# Assessify - Search Engine Crawler Rules
+# Generated for assessify.ng
+
+# Allow all search engines
+User-agent: *
+Allow: /
+
+# Disallow private areas
+Disallow: /admin/
+Disallow: /student/
+Disallow: /lecturer/
+Disallow: /partner/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /notifications/
+Disallow: /wallet/
+
+# Allow crawling of public pages
+Allow: /
+Allow: /about
+Allow: /features
+Allow: /pricing
+Allow: /faq
+Allow: /contact
+Allow: /legal/privacy
+Allow: /legal/terms
+Allow: /help
+Allow: /guides
+
+# Crawl delay (in seconds) - be nice to servers
+Crawl-delay: 1
+
+# Request rate (pages per second)
+Request-rate: 1/1s
+
+# Specific rules for Google
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /auth/
+Crawl-delay: 0
+
+# Sitemaps
+Sitemap: https://assessify.ng/sitemap.xml
+Sitemap: https://assessify.ng/sitemap-pages.xml
+
+# Block bad bots
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Crawl-delay: 10

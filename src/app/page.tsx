@@ -97,7 +97,7 @@ export default function AssessifyLanding() {
         { icon: '⚡', title: 'Get graded fast', desc: 'AI-assisted grading means detailed feedback arrives quickly, not weeks later.' },
         { icon: '📊', title: 'Track your CA scores', desc: 'See all your continuous assessment scores in one clear, organised dashboard.' },
         { icon: '💸', title: 'Earn while you learn', desc: 'Share your referral code and earn commissions on every CBT bundle purchase.' },
-        { icon: '🧠', title: 'Practice for WAEC & JAMB', desc: 'Thousands of past questions. Real exam conditions. Get exam-ready.' },
+        { icon: '🧠', title: 'Practice for GST/GNS, WAEC & JAMB', desc: 'Thousands of past questions. Real exam conditions. Get exam-ready.' },
         { icon: '🏆', title: 'Compete on leaderboards', desc: 'See where you rank. CBT practice turns study sessions into a game.' },
       ],
     },
@@ -294,7 +294,7 @@ export default function AssessifyLanding() {
               {[
                 '✓ AI-assisted grading',
                 '✓ Instant plagiarism detection',
-                '✓ WAEC & JAMB past questions',
+                '✓ GST/GNS, WAEC & JAMB past questions',
                 '✓ Withdraw earnings anytime',
               ].map((t) => (
                 <div key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,207,255,0.08)', border: '1px solid rgba(0,207,255,0.2)', borderRadius: 100, padding: '7px 16px', color: '#94B8D0', fontSize: 13, fontWeight: 500 }}>

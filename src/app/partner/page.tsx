@@ -60,7 +60,7 @@ export default async function PartnerDashboardPage() {
 
       {/* Promo Code Card for CBT Bundle Referrals */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Other Ways to Earn</h2>
+        <h2 className="text-xl font-semibold mb-4">CBT PROMOCODE EARNINGS</h2>
         <PromoCodeCard />
       </div>
 

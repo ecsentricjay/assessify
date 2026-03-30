@@ -70,7 +70,7 @@ export default async function LecturerStandaloneAssignmentsPage() {
             {assignments.map((assignment: any) => {
               const deadline = new Date(assignment.deadline)
               const isOverdue = deadline < new Date()
-              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
               const shareableLink = `${baseUrl}/assignments/${assignment.access_code}`
 
               return (

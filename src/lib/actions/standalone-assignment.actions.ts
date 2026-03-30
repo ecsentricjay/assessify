@@ -127,7 +127,7 @@ export async function createStandaloneAssignment(formData: {
     return { success: false, error: error.message }
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
   const shareableLink = `${baseUrl}/assignments/${accessCode}`
 
   revalidatePath('/lecturer/assignments')

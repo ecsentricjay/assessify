@@ -27,7 +27,7 @@ export async function sendWelcomeEmail(
     console.log(`📧 Preparing welcome email for: ${email}, role: ${role}`)
     
     // Use environment variable for app URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
     const dashboardUrl = role === 'partner' 
       ? `${baseUrl}/auth/login`
       : `${baseUrl}/auth/login`
@@ -77,7 +77,7 @@ export async function sendPartnerCredentialsEmail(
   partnerCode: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
     const loginUrl = `${baseUrl}/auth/login`
 
     const html = (await render(
@@ -155,7 +155,7 @@ export async function sendGradingCompleteEmail(
 ) {
   try {
     const percentage = Math.round((score / maxScore) * 100)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
     const dashboardUrl = `${baseUrl}/student/dashboard`
 
     const html = (await render(
@@ -199,7 +199,7 @@ export async function sendTestInvitationEmail(
   testDate?: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
     const accessUrl = `${baseUrl}/tests/${testCode}`
 
     const html = (await render(
@@ -240,7 +240,7 @@ export async function sendEnrollmentConfirmationEmail(
   enrollmentDate: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
     const dashboardUrl = `${baseUrl}/student/courses`
 
     const html = (await render(

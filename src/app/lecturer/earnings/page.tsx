@@ -334,7 +334,7 @@ export default function LecturerEarningsPage() {
 
         {/* Promo Code Card - Other Ways to Earn */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Other Ways to Earn</h2>
+          <h2 className="text-2xl font-bold mb-4">CBT PROMOCODE EARNINGS</h2>
           <PromoCodeCard />
         </div>
 

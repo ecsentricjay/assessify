@@ -44,6 +44,7 @@ export async function createBundle(data: {
   course_ids: string[] // Array of course IDs
   base_price: number
   promo_price?: number
+  commission_amount: number // Admin-set commission, not calculated
   validity_days?: number
   is_active?: boolean
 }) {
@@ -55,8 +56,9 @@ export async function createBundle(data: {
       return { error: 'At least one course is required' }
     }
 
-    // Calculate commission (15% of base price)
-    const commission_amount = Math.round((data.base_price * 15) / 100)
+    // commission set by admin in the form, not auto-calculated
+    const commission_amount = data.commission_amount  // ✅ Use admin's input
+
 
     const { data: bundle, error } = await supabase
       .from('cbt_subscription_bundles')
@@ -137,10 +139,8 @@ export async function updateBundle(
 
     if (data.is_active !== undefined) updateData.is_active = data.is_active
 
-    // Recalculate commission if base_price changed
-    if (updateData.base_price) {
-      updateData.commission_amount = Math.round((updateData.base_price * 15) / 100)
-    }
+    // Update commission if provided
+    if (data.commissionAmount !== undefined) updateData.commission_amount = data.commissionAmount
 
     const { data: bundle, error } = await supabase
       .from('cbt_subscription_bundles')

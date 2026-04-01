@@ -38,28 +38,42 @@ export async function calculateBundlePricing(
 /**
  * Create new bundle
  */
+/**
+ * Create new bundle - Admin controls all pricing
+ */
 export async function createBundle(data: {
   bundle_name: string
   bundle_description?: string
-  course_ids: string[] // Array of course IDs
+  course_ids: string[]
   base_price: number
-  promo_price?: number
-  commission_amount: number // Admin-set commission, not calculated
+  discount_amount: number      // ✅ Admin sets this
+  commission_amount: number     // ✅ Admin sets this
   validity_days?: number
   is_active?: boolean
 }) {
   try {
     const supabase = await createClient()
-
+ 
     // Validate course_ids
     if (!data.course_ids || data.course_ids.length === 0) {
       return { error: 'At least one course is required' }
     }
-
-    // commission set by admin in the form, not auto-calculated
-    const commission_amount = data.commission_amount  // ✅ Use admin's input
-
-
+ 
+    // Validate pricing makes sense
+    const studentPays = data.base_price - data.discount_amount
+    const platformKeeps = studentPays - data.commission_amount
+ 
+    if (studentPays < 0) {
+      return { error: 'Discount cannot exceed base price' }
+    }
+ 
+    if (platformKeeps < 0) {
+      return { error: 'Commission cannot exceed student payment' }
+    }
+ 
+    // Calculate promo_price from discount
+    const promo_price = data.base_price - data.discount_amount
+ 
     const { data: bundle, error } = await supabase
       .from('cbt_subscription_bundles')
       .insert({
@@ -67,19 +81,20 @@ export async function createBundle(data: {
         bundle_description: data.bundle_description,
         course_ids: data.course_ids,
         base_price: data.base_price,
-        promo_price: data.promo_price || null,
-        commission_amount: commission_amount,
+        promo_price: promo_price,              // ✅ Calculated from discount
+        discount_amount: data.discount_amount,  // ✅ Admin's value
+        commission_amount: data.commission_amount, // ✅ Admin's value
         validity_days: data.validity_days || 90,
         is_active: data.is_active !== undefined ? data.is_active : true,
       })
       .select()
       .single()
-
+ 
     if (error) {
       console.error('[createBundle] Error:', error)
       return { error: 'Failed to create bundle' }
     }
-
+ 
     return { success: true, data: bundle }
   } catch (error) {
     console.error('[createBundle] Error:', error)
@@ -88,7 +103,7 @@ export async function createBundle(data: {
 }
 
 /**
- * Update bundle
+ * Update bundle - Admin controls all pricing
  */
 export async function updateBundle(
   bundleId: string,
@@ -97,10 +112,11 @@ export async function updateBundle(
     bundle_description?: string
     course_ids?: string[]
     base_price?: number
-    promo_price?: number
+    discount_amount?: number      // ✅ Admin sets this
+    commission_amount?: number     // ✅ Admin sets this
     validity_days?: number
     is_active?: boolean
-    // Support old camelCase format from edit page
+    // Support camelCase from form
     bundleName?: string
     bundleDescription?: string
     courseIds?: string[]
@@ -108,52 +124,83 @@ export async function updateBundle(
     discountAmount?: number
     commissionAmount?: number
     validityDays?: number
-    maxPracticeSessions?: number | string
   }
 ) {
   try {
     const supabase = await createClient()
-
+ 
+    // Get current bundle to validate changes
+    const { data: currentBundle } = await supabase
+      .from('cbt_subscription_bundles')
+      .select('base_price, discount_amount, commission_amount')
+      .eq('id', bundleId)
+      .single()
+ 
     // Map camelCase to snake_case
     const updateData: any = {
       updated_at: new Date().toISOString()
     }
-
-    // Handle both camelCase and snake_case
+ 
+    // Handle both formats
     if (data.bundle_name !== undefined) updateData.bundle_name = data.bundle_name
-    else if ((data as any).bundleName !== undefined) updateData.bundle_name = (data as any).bundleName
-
+    else if (data.bundleName !== undefined) updateData.bundle_name = data.bundleName
+ 
     if (data.bundle_description !== undefined) updateData.bundle_description = data.bundle_description
-    else if ((data as any).bundleDescription !== undefined) updateData.bundle_description = (data as any).bundleDescription
-
+    else if (data.bundleDescription !== undefined) updateData.bundle_description = data.bundleDescription
+ 
     if (data.course_ids !== undefined) updateData.course_ids = data.course_ids
-    else if ((data as any).courseIds !== undefined) updateData.course_ids = (data as any).courseIds
-
+    else if (data.courseIds !== undefined) updateData.course_ids = data.courseIds
+ 
     if (data.base_price !== undefined) updateData.base_price = data.base_price
-    else if ((data as any).basePrice !== undefined) updateData.base_price = (data as any).basePrice
-
-    if (data.promo_price !== undefined) updateData.promo_price = data.promo_price
-
+    else if (data.basePrice !== undefined) updateData.base_price = data.basePrice
+ 
+    if (data.discount_amount !== undefined) updateData.discount_amount = data.discount_amount
+    else if (data.discountAmount !== undefined) updateData.discount_amount = data.discountAmount
+ 
+    if (data.commission_amount !== undefined) updateData.commission_amount = data.commission_amount
+    else if (data.commissionAmount !== undefined) updateData.commission_amount = data.commissionAmount
+ 
     if (data.validity_days !== undefined) updateData.validity_days = data.validity_days
-    else if ((data as any).validityDays !== undefined) updateData.validity_days = (data as any).validityDays
-
+    else if (data.validityDays !== undefined) updateData.validity_days = data.validityDays
+ 
     if (data.is_active !== undefined) updateData.is_active = data.is_active
-
-    // Update commission if provided
-    if (data.commissionAmount !== undefined) updateData.commission_amount = data.commissionAmount
-
+ 
+    // Calculate promo_price when base_price or discount_amount changes
+    const finalBasePrice = updateData.base_price || currentBundle?.base_price || 0
+    const finalDiscount = updateData.discount_amount !== undefined 
+      ? updateData.discount_amount 
+      : currentBundle?.discount_amount || 0
+    const finalCommission = updateData.commission_amount !== undefined
+      ? updateData.commission_amount
+      : currentBundle?.commission_amount || 0
+ 
+    // Validate pricing
+    const studentPays = finalBasePrice - finalDiscount
+    const platformKeeps = studentPays - finalCommission
+ 
+    if (studentPays < 0) {
+      return { error: 'Discount cannot exceed base price' }
+    }
+ 
+    if (platformKeeps < 0) {
+      return { error: 'Commission cannot exceed student payment' }
+    }
+ 
+    // Update promo_price to stay in sync
+    updateData.promo_price = finalBasePrice - finalDiscount
+ 
     const { data: bundle, error } = await supabase
       .from('cbt_subscription_bundles')
       .update(updateData)
       .eq('id', bundleId)
       .select()
       .single()
-
+ 
     if (error) {
       console.error('[updateBundle] Error:', error)
       return { error: 'Failed to update bundle' }
     }
-
+ 
     return { success: true, data: bundle }
   } catch (error) {
     console.error('[updateBundle] Error:', error)

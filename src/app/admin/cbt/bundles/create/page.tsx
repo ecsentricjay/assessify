@@ -95,7 +95,8 @@ export default function CreateBundlePage() {
       bundle_description: formData.bundleDescription,
       course_ids: formData.courseIds,
       base_price: formData.basePrice,
-      promo_price: formData.basePrice - formData.discountAmount,
+      discount_amount: formData.discountAmount,
+      commission_amount: formData.commissionAmount,
       validity_days: formData.validityDays,
       is_active: true,
     });

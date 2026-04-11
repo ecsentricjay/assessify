@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getAllSubscriptions } from '@/lib/actions/admin-cbt-subscriptions.actions';
+import { toast } from 'sonner';
 
 interface Subscription {
   id: string;
@@ -58,11 +60,15 @@ export default function SubscriptionsPage() {
   async function loadSubscriptions() {
     try {
       setLoading(true);
-      // TODO: Call server action to fetch subscriptions
-      // For now, showing empty state
-      setSubscriptions([]);
+      const res = await getAllSubscriptions();
+      if (res.success && res.subscriptions) {
+        setSubscriptions(res.subscriptions as Subscription[]);
+      } else {
+        toast.error(res.error || 'Failed to load subscriptions');
+      }
     } catch (error) {
       console.error('[loadSubscriptions]', error);
+      toast.error('Failed to load subscriptions');
     } finally {
       setLoading(false);
     }

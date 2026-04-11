@@ -23,8 +23,8 @@ interface FooterContentProps {
 const COMPANY_INFO = {
   name: 'ASSESSIFY',
   tagline: 'Smart Continuous Assessment Management Platform',
-  email: 'contact@assessify.ng',
-  phone: '+234 912 956 2739',
+  email: 'admin@assessify.ng',
+  phone: '09056870962',
   address: 'Old Shopping Complex, IAUE, Rumuolumeni, Obio/Akpor, Rivers State',
   year: new Date().getFullYear(),
 }
@@ -55,7 +55,7 @@ const SOCIAL_LINKS = [
   {
     name: 'WhatsApp',
     icon: MessageCircle,
-    href: 'https://wa.me/2349129562739',
+    href: 'https://wa.me/2349056870962',
     color: 'hover:text-[#25D366]',
   },
 ]

@@ -5,6 +5,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { sendWelcomeEmail } from './email.actions'
+import { createAndAssignDVA } from '@/lib/services/paystack.service'
 import crypto from 'crypto'
 
 // Create admin client for bypassing RLS
@@ -35,7 +36,7 @@ export async function signUp(formData: {
   faculty: string
   level?: number
   phone: string
-  referralCode?: string // NEW: Optional partner referral code for lecturers
+  referralCode?: string
 }) {
   const supabase = await createClient()
   const adminClient = createServiceClient()
@@ -60,7 +61,8 @@ export async function signUp(formData: {
     partnerId = partner.id
   }
 
-  // Sign up the user
+  // Sign up the user in Supabase Auth
+  // NOTE: This triggers on_auth_user_created which creates the skeleton profile + wallet
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: formData.email,
     password: formData.password,
@@ -81,30 +83,91 @@ export async function signUp(formData: {
     return { error: 'Failed to create user' }
   }
 
-  // Create profile with admin client
-  const { error: profileError } = await adminClient.from('profiles').insert({
-    id: authData.user.id,
-    institution_id: formData.institutionId,
-    first_name: formData.firstName,
-    last_name: formData.lastName,
-    role: formData.role,
-    title: formData.title,
-    matric_number: formData.matricNumber,
-    staff_id: formData.staffId,
-    department: formData.department,
-    faculty: formData.faculty,
-    level: formData.level,
-    phone: formData.phone,
-    email_verified: false,
-    referred_by_partner: partnerId, // NEW: Link to partner if code was used
-  })
+  // CHANGED: upsert instead of insert — trigger already created the skeleton row,
+  // so we update it with the real profile data from the form
+  const { error: profileError } = await adminClient
+    .from('profiles')
+    .upsert({
+      id: authData.user.id,
+      institution_id: formData.institutionId,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      role: formData.role,
+      title: formData.title,
+      matric_number: formData.matricNumber,
+      staff_id: formData.staffId,
+      department: formData.department,
+      faculty: formData.faculty,
+      level: formData.level,
+      phone: formData.phone,
+      email_verified: false,
+      referred_by_partner: partnerId,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'id',
+    })
 
   if (profileError) {
     console.error('Profile creation error:', profileError)
     return { error: profileError.message }
   }
 
-  // If lecturer was referred by partner, create referral entry
+  // Create Dedicated Virtual Account for all users
+  // Done here at signup so we have guaranteed access to form data
+  try {
+    const dvaResult = await createAndAssignDVA({
+      email: formData.email,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      phone: formData.phone,
+      preferred_bank: 'wema-bank',
+      country: 'NG',
+    })
+
+    if (!dvaResult.success) {
+      console.error('DVA creation failed (non-blocking):', dvaResult.error)
+    } else if (dvaResult.pending) {
+      // Paystack is processing — webhook will save the account when ready
+      console.log('DVA creation in progress for user:', authData.user.id)
+      // Store a pending record so we can match the webhook to this user
+      await adminClient.from('virtual_accounts').insert({
+        user_id: authData.user.id,
+        paystack_customer_code: '',
+        paystack_customer_id: 0,
+        paystack_account_id: 0,
+        account_number: 'pending',
+        account_name: formData.firstName + ' ' + formData.lastName,
+        bank_name: 'Wema Bank',
+        bank_slug: 'wema-bank',
+        bank_id: 0,
+        currency: 'NGN',
+        is_active: false, // inactive until webhook confirms
+      })
+    } else if (dvaResult.dva) {
+      // Immediate response — save now
+      const dva = dvaResult.dva
+      const account = dva.dedicated_account || dva
+      const customer = dva.customer || {}
+
+      await adminClient.from('virtual_accounts').insert({
+        user_id: authData.user.id,
+        paystack_customer_code: customer.customer_code || '',
+        paystack_customer_id: customer.id || 0,
+        paystack_account_id: account.id || 0,
+        account_number: account.account_number || '',
+        account_name: account.account_name || '',
+        bank_name: account.bank?.name || 'Wema Bank',
+        bank_slug: account.bank?.slug || 'wema-bank',
+        bank_id: account.bank?.id || 0,
+        currency: 'NGN',
+        is_active: true,
+      })
+    }
+  } catch (dvaError) {
+    console.error('DVA creation error (non-blocking):', dvaError)
+  }
+
+  // Create referral entry if lecturer was referred by a partner
   if (formData.role === 'lecturer' && partnerId && formData.referralCode) {
     const { error: referralError } = await adminClient
       .from('referrals')
@@ -117,32 +180,20 @@ export async function signUp(formData: {
 
     if (referralError) {
       console.error('Failed to create referral entry:', referralError)
-      // Don't fail the signup, just log the error
     } else {
-      // Update partner's referral counts using the helper function
       const { error: incrementError } = await adminClient
-        .rpc('increment_partner_referrals', { 
-          partner_uuid: partnerId 
+        .rpc('increment_partner_referrals', {
+          partner_uuid: partnerId
         })
 
       if (incrementError) {
         console.error('Failed to increment partner referrals:', incrementError)
-        // Don't fail signup for this
       }
     }
   }
 
-  // Create wallet for students with admin client
-  if (formData.role === 'student') {
-    const { error: walletError } = await adminClient.from('wallets').insert({
-      user_id: authData.user.id,
-      balance: 0,
-    })
-
-    if (walletError) {
-      console.error('Failed to create wallet:', walletError)
-    }
-  }
+  // REMOVED: student wallet creation block — the trigger now creates the wallet
+  // for all users with the ₦1000 signup bonus, so this is no longer needed here
 
   // Send welcome email
   try {
@@ -154,13 +205,12 @@ export async function signUp(formData: {
     )
   } catch (emailError) {
     console.error('Failed to send welcome email:', emailError)
-    // Don't fail signup if email fails
   }
 
   revalidatePath('/', 'layout')
-  return { 
-    success: true, 
-    message: formData.referralCode 
+  return {
+    success: true,
+    message: formData.referralCode
       ? 'Account created successfully with referral! Please check your email to verify your account.'
       : 'Account created successfully! Please check your email to verify your account.'
   }

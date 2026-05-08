@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/actions/auth.actions'
 import {
   initializePaystackTransaction,
@@ -10,6 +11,20 @@ import {
   formatAmountFromKobo,
 } from '@/lib/services/paystack.service'
 import { sendPaymentReceiptEmail } from '@/lib/actions/email.actions'
+
+// Create admin client for bypassing RLS
+function createServiceClient() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+}
 
 export interface CreatePaymentLinkResponse {
   success: boolean
@@ -116,7 +131,7 @@ export async function createPaymentLink(
       .insert({
         wallet_id: wallet.id,
         type: 'credit',
-        purpose: 'payment',
+        purpose: 'funding',
         amount: amountNGN,
         balance_before: wallet.balance,
         balance_after: wallet.balance, // Will be updated on verification
@@ -291,90 +306,231 @@ export async function handlePaystackWebhook(
 ): Promise<{ success: boolean; message: string }> {
   try {
     if (!event || !event.event) {
-      return {
-        success: false,
-        message: 'Invalid webhook event',
-      }
+      return { success: false, message: 'Invalid webhook event' }
     }
 
-    const supabase = await createClient()
+    // Always use admin client in webhooks — no user session available
+    const adminClient = createServiceClient()
 
-    // Only process charge.success events
-    if (event.event !== 'charge.success') {
-      return {
-        success: true,
-        message: `Event ${event.event} processed (no action needed)`,
+    // ── DVA Assignment Success ──────────────────────────────────────────
+    if (event.event === 'dedicatedaccount.assign.success') {
+      const webhookData = event.data
+      const customer = webhookData.customer
+      const dedicatedAccount = webhookData.dedicated_account
+
+      console.log('DVA assign success webhook:', JSON.stringify(webhookData, null, 2))
+
+      if (!customer?.email) {
+        return { success: true, message: 'No customer email in DVA webhook' }
       }
+
+      const { data: authUsers } = await adminClient.auth.admin.listUsers()
+      const authUser = authUsers?.users?.find((u: any) => u.email === customer.email)
+
+      if (!authUser) {
+        console.error('No auth user found for DVA webhook email:', customer.email)
+        return { success: true, message: 'User not found for DVA webhook' }
+      }
+
+      const { error: updateError } = await adminClient
+        .from('virtual_accounts')
+        .update({
+          paystack_customer_code: customer.customer_code || '',
+          paystack_customer_id: customer.id || 0,
+          paystack_account_id: dedicatedAccount.id || 0,
+          account_number: dedicatedAccount.account_number,
+          account_name: dedicatedAccount.account_name,
+          bank_name: dedicatedAccount.bank?.name || 'Wema Bank',
+          bank_slug: dedicatedAccount.bank?.slug || 'wema-bank',
+          bank_id: dedicatedAccount.bank?.id || 0,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', authUser.id)
+
+      if (updateError) {
+        console.error('Failed to update DVA record:', updateError)
+        return { success: false, message: 'Failed to update virtual account' }
+      }
+
+      console.log('DVA activated for user:', authUser.id, dedicatedAccount.account_number)
+      return { success: true, message: 'DVA activated successfully' }
+    }
+
+    // ── Bank Transfer via DVA ───────────────────────────────────────────
+    if (event.event === 'charge.success' && event.data?.channel === 'dedicated_nuban') {
+      const data = event.data
+      const accountNumber = data.authorization?.receiver_bank_account_number
+
+      console.log('DVA transfer webhook received:', {
+        accountNumber,
+        amount: data.amount,
+        reference: data.reference,
+        channel: data.channel,
+      })
+
+      if (!accountNumber) {
+        console.error('No receiver account number in transfer webhook. Authorization:', JSON.stringify(data.authorization, null, 2))
+        return { success: false, message: 'No account number in transfer webhook' }
+      }
+
+      // Find user who owns this virtual account
+      const { data: virtualAccount, error: vaError } = await adminClient
+        .from('virtual_accounts')
+        .select('user_id')
+        .eq('account_number', accountNumber)
+        .single()
+
+      if (vaError || !virtualAccount) {
+        console.error('Virtual account not found for transfer:', accountNumber, vaError)
+        return { success: false, message: 'Virtual account not found' }
+      }
+
+      // Get wallet
+      const { data: wallet, error: walletError } = await adminClient
+        .from('wallets')
+        .select('*')
+        .eq('user_id', virtualAccount.user_id)
+        .single()
+
+      if (walletError || !wallet) {
+        console.error('Wallet not found for user:', virtualAccount.user_id, walletError)
+        return { success: false, message: 'Wallet not found' }
+      }
+
+      const amountNGN = formatAmountFromKobo(data.amount || 0)
+      const balanceBefore = Number(wallet.balance)
+      const balanceAfter = balanceBefore + amountNGN
+      const reference = `DVA-${data.reference}`
+
+      // Idempotency check
+      const { data: existingTx } = await adminClient
+        .from('transactions')
+        .select('id')
+        .eq('reference', reference)
+        .maybeSingle()
+
+      if (existingTx) {
+        console.log('Transfer already processed:', reference)
+        return { success: true, message: 'Transfer already processed' }
+      }
+
+      // Credit wallet
+      const { error: walletUpdateError } = await adminClient
+        .from('wallets')
+        .update({
+          balance: balanceAfter,
+          total_funded: (Number(wallet.total_funded) || 0) + amountNGN,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', wallet.id)
+
+      if (walletUpdateError) {
+        console.error('Failed to credit wallet:', walletUpdateError)
+        return { success: false, message: 'Failed to credit wallet' }
+      }
+
+      // Record transaction
+      const { error: txInsertError } = await adminClient
+        .from('transactions')
+        .insert({
+          wallet_id: wallet.id,
+          type: 'credit',
+          purpose: 'funding',
+          amount: amountNGN,
+          balance_before: balanceBefore,
+          balance_after: balanceAfter,
+          reference,
+          description: `Bank transfer — ₦${amountNGN.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
+          status: 'completed',
+          metadata: {
+            gateway: 'paystack_dva',
+            channel: 'dedicated_nuban',
+            account_number: accountNumber,
+            paystack_reference: data.reference,
+          },
+        })
+
+      if (txInsertError) {
+        console.error('Failed to record transaction:', txInsertError)
+      }
+
+      // Send receipt email
+      const { data: userProfile } = await adminClient
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', virtualAccount.user_id)
+        .single()
+
+      const { data: authUserData } = await adminClient.auth.admin.getUserById(virtualAccount.user_id)
+
+      if (userProfile && authUserData?.user?.email) {
+        const emailDate = new Date().toLocaleDateString('en-NG', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        })
+        await sendPaymentReceiptEmail(
+          authUserData.user.email,
+          `${userProfile.first_name} ${userProfile.last_name}`,
+          amountNGN,
+          reference,
+          emailDate,
+          'Bank Transfer',
+          balanceAfter
+        ).catch((e) => console.error('Receipt email failed:', e))
+      }
+
+      console.log(`✅ Wallet credited ₦${amountNGN} for user ${virtualAccount.user_id}. New balance: ₦${balanceAfter}`)
+      return { success: true, message: `Wallet funded via transfer: ₦${amountNGN}` }
+    }
+
+    // ── Card Payment (charge.success, non-DVA) ──────────────────────────
+    if (event.event !== 'charge.success') {
+      return { success: true, message: `Event ${event.event} acknowledged` }
     }
 
     const data = event.data
-    if (!data || !data.reference) {
-      return {
-        success: false,
-        message: 'No transaction reference in webhook',
-      }
+    if (!data?.reference) {
+      return { success: false, message: 'No transaction reference in webhook' }
     }
 
-    // Get transaction from database
-    const { data: transaction, error: txError } = await supabase
+    const { data: transaction, error: txError } = await adminClient
       .from('transactions')
       .select('*')
       .eq('reference', data.reference)
-      .single()
+      .maybeSingle()
 
     if (txError || !transaction) {
-      console.log('Transaction not found, skipping webhook')
-      return {
-        success: true,
-        message: 'Transaction not found (skipped)',
-      }
+      console.log('Transaction not found for reference:', data.reference)
+      return { success: true, message: 'Transaction not found (skipped)' }
     }
 
-    // If already processed, skip
     if (transaction.status === 'completed') {
-      return {
-        success: true,
-        message: 'Transaction already processed',
-      }
+      return { success: true, message: 'Transaction already processed' }
     }
 
-    // Get wallet
-    const { data: wallet, error: walletError } = await supabase
+    const { data: wallet, error: walletError } = await adminClient
       .from('wallets')
       .select('*')
       .eq('id', transaction.wallet_id)
       .single()
 
     if (walletError || !wallet) {
-      return {
-        success: false,
-        message: 'Wallet not found',
-      }
+      return { success: false, message: 'Wallet not found' }
     }
 
-    const amountKobo = data.amount || 0
-    const amountNGN = formatAmountFromKobo(amountKobo)
-    const balanceAfter = wallet.balance + amountNGN
+    const amountNGN = formatAmountFromKobo(data.amount || 0)
+    const balanceAfter = Number(wallet.balance) + amountNGN
 
-    // Update wallet
-    const { error: updateError } = await supabase
+    await adminClient
       .from('wallets')
       .update({
         balance: balanceAfter,
-        total_funded: (wallet.total_funded || 0) + amountNGN,
+        total_funded: (Number(wallet.total_funded) || 0) + amountNGN,
         updated_at: new Date().toISOString(),
       })
       .eq('id', wallet.id)
 
-    if (updateError) {
-      return {
-        success: false,
-        message: 'Failed to update wallet',
-      }
-    }
-
-    // Update transaction status
-    const { error: txUpdateError } = await supabase
+    await adminClient
       .from('transactions')
       .update({
         status: 'completed',
@@ -383,55 +539,40 @@ export async function handlePaystackWebhook(
           ...transaction.metadata,
           webhook_processed: true,
           webhook_timestamp: new Date().toISOString(),
-          customer_id: data.customer?.id,
         },
       })
       .eq('id', transaction.id)
 
-    if (txUpdateError) {
-      console.error('Failed to update transaction after webhook:', txUpdateError)
-    }
-
-    // Send payment receipt email via webhook
-    const { data: userProfile } = await supabase
+    // Send receipt email
+    const { data: userProfile } = await adminClient
       .from('profiles')
-      .select('first_name, last_name, email')
+      .select('first_name, last_name')
       .eq('id', wallet.user_id)
       .single()
 
-    if (userProfile && userProfile.email) {
-      const studentName = `${userProfile.first_name} ${userProfile.last_name}`
-      const emailDate = new Date().toLocaleDateString('en-NG', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
+    const { data: authUserData } = await adminClient.auth.admin.getUserById(wallet.user_id)
 
+    if (userProfile && authUserData?.user?.email) {
+      const emailDate = new Date().toLocaleDateString('en-NG', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      })
       await sendPaymentReceiptEmail(
-        userProfile.email,
-        studentName,
+        authUserData.user.email,
+        `${userProfile.first_name} ${userProfile.last_name}`,
         amountNGN,
         data.reference,
         emailDate,
         'Paystack',
         balanceAfter
-      ).catch((error) => {
-        // Log but don't fail if email fails
-        console.error('Failed to send payment receipt email via webhook:', error)
-      })
+      ).catch((e) => console.error('Receipt email failed:', e))
     }
 
-    return {
-      success: true,
-      message: `Wallet funded with ₦${amountNGN}`,
-    }
+    return { success: true, message: `Wallet funded with ₦${amountNGN}` }
+
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('Webhook processing error:', message)
-    return {
-      success: false,
-      message: message,
-    }
+    return { success: false, message: message }
   }
 }
 

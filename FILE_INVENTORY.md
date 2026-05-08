@@ -248,11 +248,11 @@ Server-side business logic executed from client components (Next.js 13+).
   - `src/lib/actions/grading.actions.ts` (parent)
   - `src/components/grading/ai-grading-button.tsx` (UI)
 
-### Test & CBT Management
+### Test & Study Aid Management
 
 #### `src/lib/actions/test.actions.ts`
 - **Extension:** TypeScript (.ts)
-- **Purpose:** Test creation and management (CBT style tests)
+- **Purpose:** Test creation and management
 - **Functions:**
   - `createTest()` - Create new test
   - `getTestById()` - Fetch test details
@@ -293,45 +293,36 @@ Server-side business logic executed from client components (Next.js 13+).
   - `src/lib/actions/test.actions.ts`
   - `src/app/tests/[code]/take/` (test-taking UI)
 
-#### `src/lib/actions/student-cbt-practice.actions.ts`
+#### `src/lib/actions/study-aid.actions.ts`
 - **Extension:** TypeScript (.ts)
-- **Purpose:** CBT practice session management for students
+- **Purpose:** AI Study Aid operations - question generation, credits, analytics
 - **Functions:**
-  - `startPracticeSession()` - Begin practice
-  - `getPracticeQuestions()` - Load questions
-  - `submitAnswer()` - Record answer
-  - `completePracticeSession()` - End session, calculate score
-  - `getPracticeHistory()` - Student's past sessions
-  - `getPerformanceStats()` - Analytics data
+  - `generateQuestionsFromMaterial()` - AI generates questions from uploaded content
+  - `getStudentCredits()` - Check available credits
+  - `deductCredits()` - Use credits for question generation
+  - `getAttemptHistory()` - Student's practice history
+  - `getAdminAnalytics()` - Dashboard metrics
+  - `updateStudentCredits()` - Admin credit adjustment
 - **Related Files:**
-  - `src/lib/actions/student-cbt-purchase.actions.ts` (access check)
-  - `src/app/student/cbt/practice/` (UI pages)
+  - `src/app/student/study-aid/` (UI pages)
+  - `src/app/admin/study-aid/` (admin dashboard)
+  - `src/app/api/admin/study-aid/` (API routes)
 
-#### `src/lib/actions/student-cbt-purchase.actions.ts`
+#### `src/lib/actions/study-attempt-purchases.actions.ts`
 - **Extension:** TypeScript (.ts)
-- **Purpose:** CBT bundle purchasing and subscription management
+- **Purpose:** Study Aid credit purchasing and subscription management
 - **Functions:**
-  - `getAvailableBundles()` - Fetch purchasable bundles
-  - `purchaseBundle()` - Buy bundle with wallet/Paystack
+  - `getAvailablePackages()` - Fetch purchasable credit packages
+  - `purchaseCredits()` - Buy credits with wallet/Paystack
   - `applyPromoCode()` - Validate and apply discount
-  - `getStudentSubscriptions()` - Purchased bundles
-  - `checkBundleAccess()` - Verify subscription is active
-  - `extendSubscription()` - Renew bundle
+  - `getStudentCredits()` - Current credit balance
+  - `checkCreditBalance()` - Verify credits available
+  - `extendCredits()` - Buy additional credits
 - **Related Files:**
   - `src/lib/actions/promo-codes.actions.ts` (discount validation)
   - `src/lib/actions/payment.actions.ts` (payment processing)
-  - `src/app/student/cbt/` (purchase & practice pages)
+  - `src/app/student/study-aid/` (purchase & usage pages)
 
-#### `src/lib/actions/cbt-leaderboard.actions.ts`
-- **Extension:** TypeScript (.ts)
-- **Purpose:** CBT leaderboard and ranking system
-- **Functions:**
-  - `getGlobalLeaderboard()` - Top performers overall
-  - `getCourseLeaderboard()` - Top per course
-  - `getStudentRank()` - Student's ranking
-  - `getLeaderboardStats()` - Summary statistics
-  - `generateLeaderboardReport()` - Export leaderboard
-- **Related Files:** `src/components/cbt/LeaderboardTable.tsx`
 
 #### `src/lib/actions/test-export.actions.ts`
 - **Extension:** TypeScript (.ts)
@@ -541,7 +532,7 @@ Server-side business logic executed from client components (Next.js 13+).
   PART-DEF456GH  (Partner)
   ```
 - **Related Files:**
-  - `src/lib/actions/student-cbt-purchase.actions.ts` (validation)
+  - `src/lib/actions/study-attempt-purchases.actions.ts` (validation)
   - `src/components/promo-code-card.tsx` (display)
 
 ### Notifications
@@ -674,40 +665,18 @@ Server-side business logic executed from client components (Next.js 13+).
   - `scheduleReport()` - Email report setup
 - **Related Files:** `src/app/admin/reports/` (UI)
 
-#### `src/lib/actions/admin-cbt-analytics.actions.ts`
+#### `src/lib/actions/admin-study-aid.actions.ts`
 - **Extension:** TypeScript (.ts)
-- **Purpose:** CBT analytics and performance metrics
+- **Purpose:** Admin Study Aid analytics and management
 - **Functions:**
-  - `getCBTAnalytics()` - Main analytics data
-  - `getRevenueByBundle()` - Bundle sales metrics
+  - `getStudyAidAnalytics()` - Main analytics data
+  - `getRevenueByCredits()` - Credit sales metrics
   - `getPromoCodePerformance()` - Discount usage stats
-  - `getTopPerformers()` - Leaderboard data
-  - `getStudentDistribution()` - By score range
+  - `getTopStudents()` - By usage
+  - `getStudentCreditDistribution()` - Credit spending analysis
   - `getChartData()` - For dashboard charts
-- **Related Files:** `src/app/admin/cbt/analytics/` (UI)
+- **Related Files:** `src/app/admin/study-aid/` (UI)
 
-#### `src/lib/actions/admin-cbt-bundles.actions.ts`
-- **Extension:** TypeScript (.ts)
-- **Purpose:** Admin CBT bundle management
-- **Functions:**
-  - `createBundle()` - Create practice bundle
-  - `updateBundle()` - Modify bundle
-  - `deleteBundle()` - Remove bundle
-  - `listBundles()` - All bundles
-  - `getBundleStats()` - Sales and usage metrics
-- **Related Files:** `src/app/admin/cbt/bundles/` (UI)
-
-#### `src/lib/actions/admin-cbt-courses.actions.ts`
-- **Extension:** TypeScript (.ts)
-- **Purpose:** Admin CBT course management
-- **Functions:**
-  - `createCourse()` - Create CBT course
-  - `updateCourse()` - Modify course
-  - `deleteCourse()` - Remove course
-  - `listCourses()` - All courses
-  - `importQuestions()` - Bulk question import
-  - `getCourseStats()` - Enrollment, usage
-- **Related Files:** `src/app/admin/cbt/` (UI)
 
 #### `src/lib/actions/admin-content.actions.ts`
 - **Extension:** TypeScript (.ts)
@@ -1193,25 +1162,21 @@ Located: `src/components/notifications/`
 - **Actions:** Click to view, dismiss
 - **Related Files:** `notification-dropdown.tsx`
 
-### CBT Components
+### Study Aid Components
 
-Located: `src/components/cbt/`
+Located: `src/components/study-aid/`
 
-#### `LeaderboardTable.tsx`
-- **Purpose:** Display CBT ranking table
-- **Columns:** Rank, student name, score, accuracy, date
-- **Features:** Sort, filter, pagination
-- **Related Files:** CBT practice pages
+#### `StudyAidUpload.tsx`
+- **Purpose:** File upload for study materials
+- **Features:** Drag-drop, file preview, format support
+- **Supports:** PDF, DOCX, images (PNG, JPG)
+- **Related Files:** Study Aid pages
 
-#### `LeaderboardPreview.tsx`
-- **Purpose:** Mini leaderboard preview
-- **Shows:** Top 5 performers
-- **Related Files:** Dashboard cards
-
-#### `LeaderboardShare.tsx`
-- **Purpose:** Share leaderboard stats
-- **Creates:** Shareable link or image
-- **Related Files:** Leaderboard page
+#### `QuestionDisplay.tsx`
+- **Purpose:** Display AI-generated questions
+- **Shows:** Question text, options, explanations
+- **Interactive:** Answer selection, feedback
+- **Related Files:** Study Aid practice pages
 
 ### Promo Code Components
 
@@ -1241,7 +1206,7 @@ Located: `src/components/cbt/`
 - **Purpose:** Paystack payment button
 - **Functionality:** Initialize payment, handle response
 - **States:** Loading, success, error
-- **Related Files:** Wallet, CBT bundle pages
+- **Related Files:** Study Aid, wallet pages
 
 ### Utility Components
 
@@ -1401,17 +1366,22 @@ Located: `src/app/student/`
 - **Purpose:** Available and completed tests
 - **Shows:** Open tests, past attempts, scores
 
-#### CBT Practice Pages
+#### Study Aid Pages
 
-#### `cbt/page.tsx`
-- **Route:** `/student/cbt`
-- **Purpose:** CBT practice hub
-- **Shows:** Available bundles, purchased bundles, recommendations
+#### `study-aid/page.tsx`
+- **Route:** `/student/study-aid`
+- **Purpose:** AI Study Aid hub
+- **Shows:** Upload material, available credits, practice history
 
-#### `cbt/practice/page.tsx`
-- **Route:** `/student/cbt/practice`
-- **Purpose:** Start practice session
-- **Shows:** Course selection, session settings
+#### `study-aid/practice/page.tsx`
+- **Route:** `/student/study-aid/practice`
+- **Purpose:** Generate and answer AI questions
+- **Shows:** Generated questions, answers, explanations
+
+#### `study-aid/credits/page.tsx`
+- **Route:** `/student/study-aid/credits`
+- **Purpose:** Credit management and purchase
+- **Shows:** Current credits, usage history, pricing
 
 #### Wallet Pages
 
@@ -1600,24 +1570,24 @@ Located: `src/app/admin/finances/`
 - **Purpose:** All transactions
 - **Shows:** Transaction log with search/filter
 
-#### CBT Management
+#### Study Aid Management
 
-Located: `src/app/admin/cbt/`
+Located: `src/app/admin/study-aid/`
 
-#### `analytics/page.tsx`
-- **Route:** `/admin/cbt/analytics`
-- **Purpose:** CBT analytics dashboard
-- **Shows:** Revenue charts, promo performance, leaderboard
+#### `page.tsx`
+- **Route:** `/admin/study-aid`
+- **Purpose:** Study Aid analytics dashboard
+- **Shows:** Revenue charts, usage stats, popular materials
 
-#### `courses/page.tsx`
-- **Route:** `/admin/cbt/courses`
-- **Purpose:** Manage CBT courses
-- **Shows:** Courses list, creation button
+#### `students/page.tsx`
+- **Route:** `/admin/study-aid/students`
+- **Purpose:** Manage student credits
+- **Shows:** Students list, credit balances, usage
 
-#### `bundles/page.tsx`
-- **Route:** `/admin/cbt/bundles`
-- **Purpose:** Manage practice bundles
-- **Shows:** Bundles list, pricing, sales
+#### `settings/page.tsx`
+- **Route:** `/admin/study-aid/settings`
+- **Purpose:** Configure Study Aid settings
+- **Shows:** Pricing, free credits, feature settings
 
 #### Content Management
 
@@ -2136,7 +2106,7 @@ Project root configuration and documentation.
 
 ### Database
 
-#### `CBT-CLEAN-SCHEMA.sql`
+#### `STUDY-AID-SCHEMA.sql`
 - **Extension:** SQL
 - **Purpose:** Complete PostgreSQL database schema
 - **Contains:**
@@ -2170,7 +2140,7 @@ Project root configuration and documentation.
 - `COMPREHENSIVE_PROJECT_PROGRESS_REPORT.md` - Implementation status
 - `ACCESS_CONTROL_README.md` - Security documentation
 - `EMAIL_NOTIFICATION_IMPLEMENTATION.md` - Email system details
-- `ADMIN_CBT_ANALYTICS_GUIDE.md` - Analytics documentation
+- `ADMIN_STUDY_AID_GUIDE.md` - Study Aid documentation
 - `PROMO_CODE_SYSTEM_GUIDE.md` - Promo system details
 - `PAYSTACK_INTEGRATION_GUIDE.md` - Payment documentation
 - And 15+ other documentation files

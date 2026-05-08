@@ -10,8 +10,8 @@ export const SITE_URL = 'https://assessify.ng'
  */
 export const BRAND = {
   name: 'Assessify',
-  description: 'Premium online assessment platform for students, lecturers, and educational institutions. Practice JAMB, WAEC, NECO exams with AI-powered grading.',
-  tagline: 'Master Your Exams. Management Made Easy.',
+  description: 'Premium online assessment platform for students, lecturers, and educational institutions. Prepare for exams with AI-powered Study Aid.',
+  tagline: 'Continuous Assessment Management Made Easy.',
 }
 
 /**

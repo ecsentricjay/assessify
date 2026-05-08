@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Assessify - Online Assessment Platform for JAMB, WAEC, NECO | Nigeria",
-  description: "Premium online assessment platform for students preparing for JAMB, WAEC, NECO exams. Practice past questions, get AI-powered grading, track continuous assessment scores, and earn referral commissions.",
+  title: "Assessify - Online Assessment Platform for Tertiary Institutions | Nigeria",
+  description: "Premium online assessment platform for students and Lecturers in Nigeria.",
   keywords: [
     "CBT platform",
     "online assessment",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     siteName: "Assessify",
     title: "Assessify - Online Assessment Platform for JAMB, WAEC, NECO",
-    description: "Premium continuous assessment management with AI-powered grading, 1000+ past questions, and secure exam conditions.",
+    description: "Premium continuous assessment management with AI-powered grading, study aid, and secure cbt conditions.",
     images: [
       {
         url: "/images/og-image.png",

@@ -1,8 +1,8 @@
 # ASSESSIFY - Complete Application Documentation
 
-**Version:** 2.0  
-**Date:** March 26, 2026  
-**Status:** Production Ready (95% Complete)  
+**Version:** 2.1  
+**Date:** April 16, 2026  
+**Status:** Production Ready (98% Complete)  
 **Platform:** Educational Assessment & Testing Platform  
 **Organization:** assessify.ng  
 
@@ -25,8 +25,9 @@
 13. [Partner Program](#partner-program)
 14. [Email Notifications](#email-notifications)
 15. [Admin Dashboard](#admin-dashboard)
-16. [Development Guide](#development-guide)
-17. [Deployment](#deployment)
+16. [Recent Features (April 2026)](#recent-features-april-2026)
+17. [Development Guide](#development-guide)
+18. [Deployment](#deployment)
 
 ---
 
@@ -41,6 +42,10 @@
 - **Real-Time Analytics** - Track student performance with actionable insights
 - **Plagiarism Detection** - Maintain academic integrity with advanced detection
 - **Multi-Channel Access** - Desktop, tablet, and mobile-optimized interface
+- **AI Study Aid** - AI-powered question generation from study materials (3 free credits included)
+- **Assignment Writer** - Intelligent tool for crafting better student submissions
+- **Enhanced Security** - Comprehensive access control for all operations
+- **Advanced Admin Tools** - Enterprise-grade dashboards and reporting
 
 ### Key Stats
 
@@ -75,7 +80,8 @@ Empower educators with intelligent tools to assess student learning effectively,
 1. **AI-Powered Grading** - Reduces grading time by 70%
 2. **Standardized Evaluation** - Consistent, fair grading across all assessments
 3. **Digital-First Workflow** - Cloud-based, accessible anywhere
-4. **Income Opportunity** - Lecturers earn 35% commission on submissions, Partners earn 15%
+4. **AI Study Aid** - AI-powered question generation for personalized learning
+5. **Income Opportunity** - Lecturers earn 35% commission on submissions, Partners earn 15%
 
 ---
 
@@ -191,7 +197,7 @@ Empower educators with intelligent tools to assess student learning effectively,
 │  ├─ Grading & Results                                       │
 │  ├─ Wallets & Transactions                                  │
 │  ├─ Partners & Referrals                                    │
-│  ├─ CBT (Computer-Based Testing)                            │
+│  ├─ Study Attempt Credits & Questions                       │
 │  ├─ Notifications                                           │
 │  └─ Admin actions & audit logs                              │
 │                                                              │
@@ -405,32 +411,37 @@ User sees result
 - `src/lib/actions/transaction.actions.ts` - Transaction logic
 - `src/lib/actions/payment.actions.ts` - Payment processing
 
-### 6. Student CBT (Computer-Based Testing) Practice
+### 6. AI Study Aid Feature
 
 **Features:**
-- Practice courses with multiple questions
-- Question difficulty levels (easy, medium, hard)
-- Subscription bundles for course access
-- Expiring subscriptions (90 days default)
-- Session tracking and scoring
-- Performance analytics per student
-- Promo code discounts
-- Referral earnings sharing
+- Upload study materials (images, PDFs, documents)
+- AI-powered OCR text extraction
+- Generate practice questions from materials
+- MCQ (Multiple Choice) or Theory format
+- Auto-generated explanations for answers
+- Track practice history and progress
+- 3 free credits included per student
+- Additional credits available for purchase
+- Admin dashboard for usage analytics
+- Promo code discounts for credit packages
 
 **Workflow:**
-1. Student purchases bundle via Paystack or wallet
-2. Gains access to courses for validity period
-3. Starts practice session
-4. Answers questions (shuffled order)
-5. Gets instant feedback
-6. Session saved with score percentage
-7. Can review answers and solutions
-8. Multiple sessions tracked
+1. Student accesses AI Study Aid from dashboard
+2. Uploads study material (image/document)
+3. System extracts text via OCR
+4. Selects question format (MCQ or Theory)
+5. AI generates practice questions
+6. Student answers questions
+7. Gets instant feedback with explanations
+8. Progress tracked and saved
+9. Can purchase additional credits as needed
+10. Admin monitors usage and credits
 
 **Key Files:**
-- `src/lib/actions/student-cbt-practice.actions.ts` - Practice sessions
-- `src/lib/actions/student-cbt-purchase.actions.ts` - Bundle purchase
-- `src/app/api/cbt/submit-answer/route.ts` - Answer submission
+- `src/lib/actions/study-aid.actions.ts` - Study Aid operations
+- `src/app/api/admin/study-aid/dashboard/route.ts` - Analytics API
+- `src/app/api/admin/study-aid/get-students/route.ts` - Student management
+- `src/app/admin/study-aid/page.tsx` - Admin dashboard
 
 ### 7. Partner/Referral Program
 
@@ -545,17 +556,17 @@ WALLET FUNDING:
 8. Receipt email sent
 9. Balance updated
 
-CBT PRACTICE:
-1. View available bundles
-2. Click "Buy Bundle"
-3. Enter promo code (optional for discount)
-4. Pay via Paystack or wallet
-5. Access unlocked for 90 days
-6. Start practice session
-7. Answer questions
-8. Get instant feedback
-9. View score
-10. Repeat sessions as needed
+AI STUDY AID:
+1. Go to AI Study Aid section
+2. Upload study material (image or document)
+3. System extracts text automatically
+4. Choose question format (MCQ or Theory)
+5. Click "Generate Questions"
+6. Review AI-generated practice questions
+7. Answer each question
+8. Get instant feedback with explanations
+9. View performance summary
+10. Purchase more credits if needed (starting at ₦100)
 ```
 
 **Dashboard Shows:**
@@ -565,6 +576,7 @@ CBT PRACTICE:
 - Recent grades
 - Wallet balance
 - Notifications
+- AI Study Aid access (with free credits)
 - Referral earnings (if applicable)
 
 ### Role 2: LECTURER
@@ -683,11 +695,11 @@ WITHDRAWAL PROCESSING:
 8. Send confirmation email
 
 ANALYTICS:
-1. View CBT Analytics Dashboard
-2. See summary metrics
+1. View Study Aid Analytics Dashboard
+2. See summary metrics (students, attempts, revenue)
 3. View revenue charts
-4. Promo code performance
-5. Top performers
+4. Popular courses for question generation
+5. Top students by usage
 6. Recent activity
 7. Export to CSV
 
@@ -1085,9 +1097,9 @@ getPartnerStats(partnerId)
   - Withdrawal requests
 ```
 
-### 12. CBT Practice Module
+### 12. AI Study Aid Module
 
-**Location:** `src/lib/actions/student-cbt-practice.actions.ts`
+**Location:** `src/lib/actions/study-aid.actions.ts`
 
 **Key Functions:**
 
@@ -1346,9 +1358,9 @@ getPracticeHistory(courseId)
 - `metadata` (JSON)
 - `created_at` (timestamp)
 
-### CBT Tables
+### Study Attempt Tables
 
-#### cbt_courses
+#### study_attempt_credits
 - `id` (UUID)
 - `course_code` (varchar)
 - `course_title` (varchar)
@@ -1358,7 +1370,7 @@ getPracticeHistory(courseId)
 - `created_by` (UUID)
 - `created_at`, `updated_at` (timestamp)
 
-#### cbt_questions
+#### study_attempts
 - `id` (UUID)
 - `course_id` (UUID)
 - `topic_id` (UUID)
@@ -1373,7 +1385,7 @@ getPracticeHistory(courseId)
 - `created_by` (UUID)
 - `created_at`, `updated_at` (timestamp)
 
-#### cbt_subscription_bundles
+#### study_attempt_purchases
 - `id` (UUID)
 - `bundle_name` (varchar)
 - `bundle_description` (text)
@@ -1387,7 +1399,7 @@ getPracticeHistory(courseId)
 - `created_by` (UUID)
 - `created_at`, `updated_at` (timestamp)
 
-#### cbt_student_subscriptions
+#### study_attempt_settings
 - `id` (UUID)
 - `student_id` (UUID)
 - `bundle_id` (UUID)
@@ -1405,7 +1417,7 @@ getPracticeHistory(courseId)
 - `is_active` (boolean)
 - `created_at`, `updated_at` (timestamp)
 
-#### cbt_practice_sessions
+#### transactions (for Study Aid revenue)
 - `id` (UUID)
 - `student_id` (UUID)
 - `course_id` (UUID)
@@ -2322,57 +2334,453 @@ NEXT_PUBLIC_BASE_URL=https://assessify.ng
 **User Management:**
 - View all users (paginated, searchable)
 - Filter by role, status, department
+- Search by name, email, ID
 - View user profile and activity
 - Activate/deactivate accounts
 - Reset user passwords
 - View audit trail
+- Manual credit/debit for adjustments
 
 **Financial Management:**
-- View all transactions
+- View all transactions (with advanced filtering)
 - Revenue reports by date range
-- Commission distribution
+- Commission distribution and tracking
 - Partner earnings verification
 - Manual wallet adjustments
 - Dispute resolution
+- Refund processing system
+- Real-time financial dashboards
 
 **Withdrawal Management:**
-- Review pending withdrawal requests
+- Review pending withdrawal requests (lecturer and partner)
 - Approve/reject with notes
 - Mark as paid
 - Send confirmations
 - View complete history
 - Generate bank transfer list
+- Batch process multiple withdrawals
+- Track payment status
 
 **Partner Management:**
 - Create new partners (manually)
-- View all partners
-- Monitor referral performance
-- Track commissions
+- View all partners with advanced filtering
+- Monitor referral performance and metrics
+- Track commissions and earnings
+- View referred lecturers list
 - Suspend/activate partners
+- Adjust commission rates
 - Send communications
+- Export partner data to CSV/PDF
+- Performance analytics and charts
 
-**CBT Analytics:**
-- Real-time metrics dashboard
-- Revenue tracking
-- Practice session analytics
-- Promo code performance
+**CBT Administration:**
+- Real-time metrics dashboard with key analytics
+- Revenue tracking and breakdowns
+- Practice session analytics and trends
+- Promo code performance metrics
 - Student performance distribution
 - Course popularity metrics
-- Export reports to CSV
+- Leaderboard management
+- Bundle/subscription management
+- Subscription analytics and tracking
+- Performance visualization with charts
+- Export reports to CSV and PDF
 
 **Settings & Configuration:**
-- System settings (future)
-- Fee structures
-- Commission rates
-- Email templates
-- Rate limiting
+- System-wide settings and toggles
+- Fee structures configuration
+- Commission rates management
+- Email template customization
+- Rate limiting settings
+- Feature toggles per institution
+- Access control policies
 
 **Logs & Audit:**
-- View all admin actions
-- Track user activity
+- View all admin actions with timestamps
+- Track user activity timeline
 - System event logs
-- Error logs
-- Generate reports
+- Error logs with stack traces
+- Generate detailed reports
+- Export audit trail data
+- Activity filtering and search
+
+---
+
+## Recent Features (April 2026)
+
+### 1. Access Control Implementation
+
+**What's New:** Comprehensive, centralized access control system for all server actions interacting with RLS-disabled database tables.
+
+**Key Components:**
+
+**File:** `src/lib/actions/access-control.ts` (585 lines)
+- Centralized utility for all access control checks
+- Authentication verification
+- Role-based authorization
+- Course/Assignment/Test-specific access validation
+
+**Functions Exported:**
+```typescript
+// Authentication
+export async function requireAuth(): Promise<AccessCheckResult>
+export async function requireRole(role: string): Promise<AccessCheckResult>
+export async function requireRoles(roles: string[]): Promise<AccessCheckResult>
+
+// Course Access
+export async function checkCourseAccess(courseId: string): Promise<AccessCheckResult>
+export async function checkCourseEnrollment(courseId: string): Promise<AccessCheckResult>
+
+// Assignment Access  
+export async function checkAssignmentAccess(assignmentId: string): Promise<AccessCheckResult>
+
+// Test Access
+export async function checkTestAccess(testId: string): Promise<AccessCheckResult>
+export async function checkTestAttemptAccess(testId: string): Promise<AccessCheckResult>
+
+// Record Access
+export async function checkCARecordAccess(studentId: string): Promise<AccessCheckResult>
+export async function checkPartnerAccess(partnerId: string): Promise<AccessCheckResult>
+```
+
+**Modified Action Files:**
+- `course.actions.ts` - Enhanced with enrollment checks for students
+- `assignment.actions.ts` - Added access control to all functions
+- `test.actions.ts` - Comprehensive access controls added
+- All functions now return standardized `{ success: true/false, error?: string, data?: any }` format
+
+**Security Features Implemented:**
+✅ Role-based access control (RBAC)  
+✅ User authentication verification  
+✅ Course enrollment validation  
+✅ Lecturer/admin privilege checks  
+✅ Centralized access utility  
+✅ Backward-compatible responses  
+
+**Usage Pattern:**
+```typescript
+// In server actions
+const { allowed, user, error } = await requireAuth()
+if (!allowed) return { success: false, error }
+
+const access = await checkCourseAccess(courseId)
+if (!access.allowed) return { success: false, error: access.error }
+```
+
+---
+
+### 2. Study Aid System
+
+**What's New:** Comprehensive AI-powered study assistance platform with credit-based access control.
+
+**Features:**
+- AI-generated study materials on-demand
+- Topic-based learning resources
+- Credit/token system for usage tracking
+- Student purchase interface
+- Admin credit management
+- Usage history and analytics
+
+**Key Files:**
+- `src/lib/actions/study-aid.actions.ts` - Study aid core logic
+- `src/app/api/study-aid/generate/route.ts` - Content generation endpoint
+- `src/app/api/study-aid/purchase-from-wallet/route.ts` - Credit purchasing
+- `src/components/study-aid/` - UI components
+
+**Study Aid Routes:**
+- `/student/study-aid/` - Main study aid dashboard
+- `/student/study-aid/attempt/` - Active study sessions
+- `/student/study-aid/history/` - Usage history
+- `/student/study-aid/purchase/` - Purchase credits interface
+
+**Credit System:**
+- Users purchase study credits via wallet
+- Each AI generation consumes credits
+- Admin can award bonus credits
+- Credits displayed in real-time
+- Usage history tracked per user
+- Refunds available for unused credits
+
+---
+
+### 3. Assignment Writer (AI-Assisted)
+
+**What's New:** Intelligent assignment writing tool using Claude AI to help students craft better submissions.
+
+**Features:**
+- Topic-based assignment generation
+- Outline creation and expansion
+- Real-time editing interface
+- Save drafts feature
+- Direct submission to assignment
+- Plagiarism similarity checking
+- Usage tracking and limits
+
+**Route:** `/student/assignment-writer/`
+
+**Key Files:**
+- `src/components/student/assignment-writer-client.tsx` - Main UI
+- `src/components/student/formatted-assignment-content.tsx` - Content display
+- `src/lib/actions/assignment-ai.actions.ts` - AI logic
+
+**Workflow:**
+1. Student selects assignment
+2. Enters topic/scope
+3. AI generates outline
+4. Student expands sections
+5. Real-time editing
+6. Check plagiarism similarity
+7. Save as draft or submit directly
+
+**Admin Controls:**
+- Toggle feature on/off per assignment
+- Set maximum uses per student
+- Monitor usage statistics
+- Adjust AI generation parameters
+
+---
+
+### 4. CBT Leaderboard Features
+
+**What's New:** Real-time student ranking system with performance tracking and achievement badges.
+
+**Features:**
+- Live leaderboard rankings
+- Performance tiers (bronze, silver, gold, platinum)
+- Achievement badges
+- Scorecard displays
+- Comparison with other students
+- Monthly and all-time rankings
+- Shareable leaderboard links
+
+**Key Components:**
+- `src/components/cbt/LeaderboardTable.tsx` - Main leaderboard display
+- `src/components/cbt/LeaderboardPreview.tsx` - Widget preview
+- `src/components/cbt/LeaderboardShare.tsx` - Sharing functionality
+
+**Key Files:**
+- `src/lib/actions/cbt-leaderboard.actions.ts` - Ranking algorithms
+- `src/app/admin/cbt/leaderboard/` - Admin leaderboard management
+
+**Admin Dashboard Enhancements:**
+- `/admin/cbt/leaderboard/` - Leaderboard management page
+- View rankings by course
+- View rankings by time period
+- Generate performance reports
+- Archive historical data
+
+---
+
+### 5. Enhanced Admin Dashboard
+
+**New Sections:**
+
+**A. CBT Administration Hub** (`/admin/cbt/`)
+- Analytics dashboard with real-time metrics
+- Course management (create, edit, delete)
+- Bundle management (subscription packages)
+- Subscription tracking
+- Leaderboard management
+- Performance analytics
+
+**Components Added:**
+- Admin CBT analytics dashboard
+- Bundle management interface
+- Subscription management tools
+- Course creation/editing forms
+- Performance visualization charts
+
+**B. Partner Management** (`/admin/partners/`)
+- Partner list with advanced filtering
+- Partner performance analytics
+- Commission tracking
+- Referral monitoring
+- Withdrawal request processing
+- Bulk partner operations
+- Export partner data to CSV
+
+**Components Added:**
+- `admin/partner-earnings-list.tsx` - Earnings display
+- `admin/partner-performance-charts.tsx` - Performance visualization
+- `admin/partner-referrals-list.tsx` - Referral tracking
+- `admin/partner-stats-cards.tsx` - Quick stats
+- `admin/partner-table.tsx` - Partner management
+- `admin/partner-withdrawals-list.tsx` - Withdrawal list
+- `admin/advanced-partner-filters.tsx` - Advanced filtering
+- `admin/bulk-partner-actions.tsx` - Bulk operations
+- `admin/export-partners-button.tsx` - Export functionality
+- `admin/commission-rate-history.tsx` - Commission history
+
+**C. Financial Management** (`/admin/finances/`)
+- Enhanced transaction logging
+- Wallet administration
+- Refund processing system
+- Revenue reports by category
+- Commission distribution tracking
+
+**New Routes:**
+- `/admin/finances/wallets/` - Wallet management
+- `/admin/finances/transactions/` - Transaction logs
+- `/admin/finances/refunds/` - Refund processing
+
+**D. Platform Reporting** (`/admin/reports/`)
+- Generate custom reports
+- Revenue analytics
+- User growth metrics
+- Feature usage statistics
+- Export to CSV/PDF
+
+---
+
+### 6. Document Management System
+
+**What's New:** Enhanced document parsing and import capabilities for multiple file formats.
+
+**Supported Formats:**
+- PDF (via pdf-parse)
+- Microsoft Word (.docx, via Mammoth)
+- Plain text (.txt)
+- Images (OCR via Tesseract.js)
+
+**Key Services:**
+- `src/lib/services/document-parser.service.ts` - Main parsing logic
+- Automatic format detection
+- Error handling with fallbacks
+- Batch processing support
+
+**Use Cases:**
+- Import assignment content
+- Parse student submissions
+- Extract text from uploaded files
+- Generate text embeddings for plagiarism
+
+---
+
+### 7. Enhanced Wallet & Financial System
+
+**New Features:**
+
+**A. Refund Processing**
+- `src/lib/actions/admin-refunds.actions.ts` - Refund management
+- Automatic refund requests for failed transactions
+- Manual refund initiations by admin
+- Refund history tracking
+- Status notifications to users
+
+**B. Advanced Withdrawal System**
+- `src/lib/actions/lecturer-withdrawals.actions.ts` - Lecturer withdrawals
+- `src/lib/actions/partner-withdrawals.actions.ts` - Partner payouts
+- `src/lib/actions/admin-withdrawals.actions.ts` - Admin management
+- Multiple bank account support
+- Scheduled payouts
+- Batch processing
+- Compliance tracking
+
+**C. Earnings Analytics**
+- `src/lib/actions/get-recent-earnings.actions.ts` - Real-time earnings
+- `src/lib/actions/partner-earnings.actions.ts` - Partner earnings
+- `src/lib/actions/earnings.actions.ts` - General earnings tracking
+- Breakdown by source
+- Trend analysis
+- Projection calculations
+
+**New Routes:**
+- `/admin/finances/withdrawals/` - Withdrawal management
+- `/admin/finances/refunds/` - Refund processing
+- `/admin/finances/reports/` - Financial reports
+
+---
+
+### 8. New API Endpoints
+
+**CBT Operations:**
+- `POST /api/cbt/submit-answer/` - Submit test answer
+- `POST /api/cbt/complete-session/` - Complete test session
+
+**Wallet Management:**
+- `GET /api/wallet/balance/` - Get wallet balance
+- `POST /api/wallet/deposit/` - Deposit funds
+
+**Study Aid:**
+- `POST /api/study-aid/generate/` - Generate study content
+- `POST /api/study-aid/purchase-from-wallet/` - Purchase credits
+
+**Payment Processing:**
+- `POST /api/payments/paystack/` - Paystack webhook handling
+
+**Partner Validation:**
+- `GET /api/partners/validate-code/` - Validate partner referral code
+
+**Student Features:**
+- `GET /api/student/download-assignment/` - Download assignment files
+- `POST /api/student/wallet/` - Student wallet operations
+
+**Automated Tasks:**
+- `POST /api/cron/auto-grade/` - Automatic grading scheduler
+- `POST /api/cron/grade-assignments/` - Assignment auto-grading job
+
+**Institutions:**
+- `GET|POST /api/institutions/` - Institution management
+
+**Email Testing:**
+- `POST /api/test-email/` - Send test email
+
+---
+
+### 9. Enhanced Components Library
+
+**New UI Components Added:**
+
+**Admin Components:**
+- Partner earnings and performance dashboards
+- CBT analytics visualizations
+- Financial reporting tools
+- Advanced filtering interfaces
+- Bulk action handlers
+- Export utilities
+
+**Student Components:**
+- Assignment writer interface
+- Study aid dashboard
+- Credit display widgets
+- Formatted content viewers
+- Enhanced navigation
+
+**Partner Components:**
+- Referral code display with copy buttons
+- Earnings summary widgets
+- Referral history lists
+- Profile management forms
+
+**Shared Utilities:**
+- Copy-to-clipboard button component
+- Delete confirmation dialogs
+- Earnings breakdown visualizations
+- Paystack payment button integration
+- SEO head component for metadata
+
+**Promo Code Components:**
+- Promo code card display
+- Promo code management interface
+- Usage statistics visualization
+
+---
+
+### 10. Database Schema Enhancements
+
+**New Tables/Fields:**
+- Study aid credits system
+- Leaderboard rankings
+- Admin configuration settings
+- Enhanced transaction logging
+- Refund tracking
+- Document storage metadata
+
+**Improvements:**
+- Better indexing for performance
+- RLS policy refinements
+- Audit trail enhancements
+- Real-time subscription support
 
 ---
 

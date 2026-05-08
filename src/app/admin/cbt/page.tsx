@@ -7,6 +7,7 @@ import { Plus, BookOpen, Package, Users, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { getAllCourses } from '@/lib/actions/admin-cbt-courses.actions';
 import { getAllBundles } from '@/lib/actions/admin-cbt-bundles.actions';
+import { getAllSubscriptions } from '@/lib/actions/admin-cbt-subscriptions.actions';
 
 interface Stats {
   totalCourses: number;
@@ -30,18 +31,29 @@ export default function AdminCBTDashboard() {
 
   async function loadStats() {
     try {
-      const [coursesRes, bundlesRes] = await Promise.all([getAllCourses(), getAllBundles()]);
+      const [coursesRes, bundlesRes, subscriptionsRes] = await Promise.all([
+        getAllCourses(),
+        getAllBundles(),
+        getAllSubscriptions(),
+      ]);
 
       let totalQuestions = 0;
       if (coursesRes.success && coursesRes.courses) {
         totalQuestions = (coursesRes.courses as any[]).reduce((sum, course) => sum + (course.question_count ?? 0), 0);
       }
 
+      let activeSubscriptions = 0;
+      if (subscriptionsRes.success && subscriptionsRes.subscriptions) {
+        activeSubscriptions = (subscriptionsRes.subscriptions as any[]).filter(
+          (sub) => sub.status === 'active'
+        ).length;
+      }
+
       setStats({
         totalCourses: coursesRes.success ? (coursesRes.courses?.length ?? 0) : 0,
         totalQuestions,
         totalBundles: bundlesRes.success ? (bundlesRes.bundles?.length ?? 0) : 0,
-        activeSubscriptions: 0, // TODO: Fetch from subscriptions
+        activeSubscriptions,
       });
     } catch (error) {
       console.error('[loadStats]', error);

@@ -166,6 +166,75 @@ export default async function StudentDashboard() {
           </CardContent>
         </Card>
 
+        {/* NEW: AI Study Aid Highlight Card */}
+        <Card className="mb-8 border-2 border-blue-300 bg-linear-to-br from-blue-50 via-indigo-50 to-blue-100 shadow-lg hover:shadow-xl transition-all">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-100 rounded-lg">
+                  <Sparkles className="h-8 w-8 text-blue-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-2xl text-blue-900">AI Study Aid</CardTitle>
+                    <Badge className="bg-blue-600 text-white text-xs">NEW</Badge>
+                  </div>
+                  <CardDescription className="text-base mt-1 text-blue-800">
+                    Transform study materials into AI-generated practice questions
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span>Upload images or documents</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span>Auto text extraction (OCR)</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span>Instant question generation</span>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
+                  <span>MCQ or Theory format</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
+                  <span>Detailed explanations included</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
+                  <span>Track your practice history</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between">
+                <div className="space-y-1 mb-4">
+                  <p className="text-sm font-medium text-blue-700">Get Started</p>
+                  <p className="text-xs text-blue-600">3 free attempts included</p>
+                  <p className="text-xs text-blue-500">Additional purchases available</p>
+                </div>
+                <Link href="/student/study-aid">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" size="lg">
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Start Studying Now
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
@@ -225,25 +294,6 @@ export default async function StudentDashboard() {
               <p className="text-gray-600 mb-4">Take online tests and view results</p>
               <Link href="/student/tests">
                 <Button className="w-full">View Tests</Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="md:col-span-2 hover:shadow-xl transition-all cursor-pointer border-2 border-orange-300 bg-linear-to-br from-orange-50 via-amber-50 to-orange-100 shadow-lg hover:scale-105 hover:border-orange-400">
-            <CardHeader>
-              <div className="text-6xl mb-3 animate-bounce">🧪</div>
-              <div className="flex items-center gap-2 mb-2">
-                <CardTitle className="text-2xl text-orange-900">CBT Practice</CardTitle>
-                <Badge className="bg-orange-500 text-white text-xs animate-pulse">HOT</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700 font-medium mb-2">📖 Master GST/GNS Courses, JAMB, WAEC & NECO with AI-powered tests</p>
-              <p className="text-sm text-gray-600 mb-4">Practice hundreds of past questions with instant feedback</p>
-              <Link href="/student/cbt">
-                <Button className="w-full bg-linear-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold h-10">
-                  🚀 Start Practicing Now
-                </Button>
               </Link>
             </CardContent>
           </Card>

@@ -220,3 +220,186 @@ export function formatAmountToKobo(ngnAmount: number): number {
 export function formatAmountFromKobo(koboAmount: number): number {
   return koboAmount / 100;
 }
+
+// ─── Dedicated Virtual Account (DVA) ───────────────────────────────────────
+
+export interface PaystackCustomer {
+  customer_code: string
+  id: number
+  email: string
+  first_name: string
+  last_name: string
+}
+
+export interface PaystackDVA {
+  bank: {
+    name: string
+    slug: string
+    id: number
+  }
+  account_name: string
+  account_number: string
+  id: number
+  assigned: boolean
+}
+
+/**
+ * Create a Paystack customer
+ * Required before assigning a DVA
+ */
+export async function createPaystackCustomer(data: {
+  email: string
+  first_name: string
+  last_name: string
+  phone?: string
+}): Promise<{ success: boolean; customer?: PaystackCustomer; error?: string }> {
+  try {
+    if (!SECRET_KEY) throw new Error('Paystack API key not configured')
+
+    const response = await fetch(`${PAYSTACK_BASE_URL}/customer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SECRET_KEY}`,
+      },
+      body: JSON.stringify(data),
+    })
+
+    const result = await response.json()
+
+    if (!result.status) {
+      return { success: false, error: result.message || 'Failed to create customer' }
+    }
+
+    return { success: true, customer: result.data }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Paystack create customer error:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Validate a customer's NIN via Paystack
+ * Required before DVA assignment on live mode
+ */
+export async function validateCustomerIdentity(data: {
+  customer_code: string
+  country: string
+  type: 'nin'
+  value: string // the NIN number
+  first_name: string
+  last_name: string
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!SECRET_KEY) throw new Error('Paystack API key not configured')
+
+    const response = await fetch(`${PAYSTACK_BASE_URL}/customer/${data.customer_code}/identification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SECRET_KEY}`,
+      },
+      body: JSON.stringify({
+        country: data.country,
+        type: data.type,
+        value: data.value,
+        first_name: data.first_name,
+        last_name: data.last_name,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!result.status) {
+      return { success: false, error: result.message || 'Identity validation failed' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Paystack identity validation error:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Single-step: Create customer + assign DVA in one call
+ * Uses /dedicated_account/assign endpoint
+ */
+export async function createAndAssignDVA(data: {
+  email: string
+  first_name: string
+  last_name: string
+  phone: string
+  preferred_bank: string
+  country: string
+}): Promise<{ success: boolean; pending?: boolean; dva?: any; error?: string }> {
+  try {
+    if (!SECRET_KEY) throw new Error('Paystack API key not configured')
+
+    const response = await fetch(`${PAYSTACK_BASE_URL}/dedicated_account/assign`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SECRET_KEY}`,
+      },
+      body: JSON.stringify(data),
+    })
+
+    const result = await response.json()
+    console.log('Paystack DVA assign response:', JSON.stringify(result, null, 2))
+
+    if (!result.status) {
+      return { success: false, error: result.message || 'Failed to assign DVA' }
+    }
+
+    // Async response — Paystack will send webhook when done
+    if (result.message === 'Assign dedicated account in progress') {
+      return { success: true, pending: true }
+    }
+
+    // Sync response — account details returned immediately
+    return { success: true, pending: false, dva: result.data }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Paystack DVA assign error:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Fetch an existing customer's DVA details from Paystack
+ */
+export async function getCustomerDVA(
+  customer_code: string
+): Promise<{ success: boolean; dva?: PaystackDVA; error?: string }> {
+  try {
+    if (!SECRET_KEY) throw new Error('Paystack API key not configured')
+
+    const response = await fetch(`${PAYSTACK_BASE_URL}/customer/${customer_code}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SECRET_KEY}`,
+      },
+    })
+
+    const result = await response.json()
+
+    if (!result.status) {
+      return { success: false, error: result.message || 'Failed to fetch customer' }
+    }
+
+    const dva = result.data?.dedicated_account
+    if (!dva) {
+      return { success: false, error: 'No virtual account assigned yet' }
+    }
+
+    return { success: true, dva }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Paystack get DVA error:', message)
+    return { success: false, error: message }
+  }
+}

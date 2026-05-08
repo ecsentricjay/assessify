@@ -1,240 +1,220 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react';
-import Link from 'next/link';
-import { getAllBundles, deleteBundle, toggleBundleStatus } from '@/lib/actions/admin-cbt-bundles.actions';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { getAllBundles, toggleBundleStatus, deleteBundle, type BundleWithDetails } from '@/lib/actions/admin-cbt-bundles.actions'
 
-interface Bundle {
-  id: string;
-  bundle_name: string;
-  bundle_description: string;
-  base_price: number;
-  discount_amount: number;
-  commission_amount: number;
-  validity_days: number;
-  max_practice_sessions: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-export default function BundlesPage() {
-  const [bundles, setBundles] = useState<Bundle[]>([]);
-  const [filteredBundles, setFilteredBundles] = useState<Bundle[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [deleting, setDeleting] = useState<string | null>(null);
+export default function AdminBundlesPage() {
+  const router = useRouter()
+  const [bundles, setBundles] = useState<BundleWithDetails[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadBundles();
-  }, []);
-
-  useEffect(() => {
-    setFilteredBundles(
-      bundles.filter((bundle) =>
-        bundle.bundle_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [searchTerm, bundles]);
+    loadBundles()
+  }, [])
 
   async function loadBundles() {
-    try {
-      setLoading(true);
-      const res = await getAllBundles();
-      if (res.success && res.bundles) {
-        setBundles(res.bundles as Bundle[]);
+    const result = await getAllBundles()
+    if (result.success) {
+      setBundles(result.bundles || [])
+    } else {
+      alert(result.error || 'Failed to load bundles')
+    }
+    setLoading(false)
+  }
+
+  async function handleToggle(bundleId: string) {
+    if (confirm('Toggle bundle status?')) {
+      const result = await toggleBundleStatus(bundleId)
+      if (result.success) {
+        loadBundles()
+      } else {
+        alert(result.error || 'Failed to toggle status')
       }
-    } catch (error) {
-      console.error('[loadBundles]', error);
-      toast.error('Failed to load bundles');
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleDelete(bundleId: string) {
-    if (!confirm('Are you sure you want to delete this bundle?')) return;
-
-    try {
-      setDeleting(bundleId);
-      const res = await deleteBundle(bundleId);
-      if (res.success) {
-        setBundles(bundles.filter((b) => b.id !== bundleId));
-        toast.success('Bundle deleted successfully');
-      } else {
-        toast.error(res.error || 'Failed to delete bundle');
-      }
-    } finally {
-      setDeleting(null);
+    if (confirm('Are you sure? This cannot be undone.')) {
+      const result = await deleteBundle(bundleId)
+      alert(result.message || result.error)
+      if (result.success) loadBundles()
     }
   }
 
-  async function handleToggleStatus(bundleId: string) {
-    try {
-      const res = await toggleBundleStatus(bundleId);
-      if (res.success) {
-        setBundles(
-          bundles.map((b) => (b.id === bundleId ? { ...b, is_active: !b.is_active } : b))
-        );
-        toast.success('Bundle status updated');
-      } else {
-        toast.error(res.error || 'Failed to update status');
-      }
-    } catch (error) {
-      console.error('[handleToggleStatus]', error);
-      toast.error('Failed to update status');
-    }
+  // Helper to get effective price
+  const getEffectivePrice = (bundle: any) => {
+    return bundle.promo_price ?? bundle.base_price ?? 0
   }
 
-  const getStudentPrice = (bundle: Bundle) => bundle.base_price - bundle.discount_amount;
-  const getPlatformKeep = (bundle: Bundle) =>
-    bundle.base_price - bundle.discount_amount - bundle.commission_amount;
+  // Helper to check if free
+  const isFree = (bundle: any) => {
+    return getEffectivePrice(bundle) === 0
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="space-y-6 p-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">CBT Bundles</h1>
-            <p className="text-gray-600 mt-1">Manage bundle pricing and availability</p>
-          </div>
-          <Button asChild>
-            <Link href="/admin/cbt/bundles/create">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Bundle
-            </Link>
-          </Button>
+    <div className="p-8 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">CBT Bundles</h1>
+          <p className="text-gray-600">Manage course bundles and pricing</p>
         </div>
+        <button
+          onClick={() => router.push('/admin/cbt/bundles/create')}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+        >
+          + Create Bundle
+        </button>
+      </div>
 
-        {/* Search */}
-        <Card>
-          <CardContent className="pt-6">
-            <Input
-              placeholder="Search bundles..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
-          </CardContent>
-        </Card>
-
-        {/* Bundles Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>All Bundles ({filteredBundles.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-gray-500">Loading bundles...</div>
-            ) : filteredBundles.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No bundles found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b">
-                    <tr className="text-sm">
-                      <th className="text-left py-2 px-4">Bundle Name</th>
-                      <th className="text-right py-2 px-4">Base Price</th>
-                      <th className="text-right py-2 px-4">Student Pays</th>
-                      <th className="text-right py-2 px-4">Referrer Earns</th>
-                      <th className="text-right py-2 px-4">Platform Keeps</th>
-                      <th className="text-center py-2 px-4">Validity</th>
-                      <th className="text-center py-2 px-4">Status</th>
-                      <th className="text-right py-2 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBundles.map((bundle) => (
-                      <tr key={bundle.id} className="border-b hover:bg-gray-50 text-sm">
-                        <td className="py-3 px-4">
-                          <div className="font-medium">{bundle.bundle_name}</div>
-                          <div className="text-xs text-gray-500">{bundle.bundle_description}</div>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          ₦{bundle.base_price.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-green-600 font-medium">
-                          ₦{getStudentPrice(bundle).toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-blue-600 font-medium">
-                          ₦{bundle.commission_amount.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-purple-600 font-medium">
-                          ₦{getPlatformKeep(bundle).toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-medium">
-                            {bundle.validity_days}d
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleToggleStatus(bundle.id)}
-                            className="inline-flex items-center gap-1 text-sm"
-                          >
-                            {bundle.is_active ? (
-                              <span className="flex items-center gap-1 text-green-600">
-                                <Eye className="w-4 h-4" />
-                                Active
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-gray-500">
-                                <EyeOff className="w-4 h-4" />
-                                Inactive
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex justify-center items-center py-16">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading bundles...</p>
+          </div>
+        </div>
+      ) : bundles.length === 0 ? (
+        /* Empty State */
+        <div className="text-center py-16 bg-white rounded-lg shadow">
+          <p className="text-6xl mb-4">📦</p>
+          <h3 className="text-xl font-semibold mb-2">No bundles yet</h3>
+          <p className="text-gray-600 mb-6">Create your first CBT bundle to get started</p>
+          <button
+            onClick={() => router.push('/admin/cbt/bundles/create')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Create First Bundle
+          </button>
+        </div>
+      ) : (
+        /* Bundles Grid */
+        <div className="grid gap-4">
+          {bundles.map((bundle: any) => {
+            const effectivePrice = getEffectivePrice(bundle)
+            const bundleIsFree = isFree(bundle)
+            
+            return (
+              <div
+                key={bundle.id}
+                className={`bg-white p-6 rounded-lg shadow border-2 transition ${
+                  bundleIsFree
+                    ? 'border-green-200 bg-gradient-to-r from-green-50 to-emerald-50'
+                    : bundle.is_active
+                    ? 'border-gray-200 hover:border-blue-300'
+                    : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  {/* Left Side - Bundle Info */}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-bold">{bundle.bundle_name}</h3>
+                      {bundleIsFree && (
+                        <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-semibold">
+                          🎁 FREE
+                        </span>
+                      )}
+                      {!bundle.is_active && (
+                        <span className="bg-gray-400 text-white px-3 py-1 rounded-full text-xs font-semibold">
+                          INACTIVE
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-gray-600 text-sm mb-3">
+                      {bundle.bundle_description || 'No description'}
+                    </p>
+                    
+                    {/* Stats Row */}
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Price:</span>
+                        {bundleIsFree ? (
+                          <span className="text-green-600 font-bold">FREE</span>
+                        ) : (
+                          <span className="font-semibold">
+                            ₦{effectivePrice.toLocaleString()}
+                            {bundle.promo_price && bundle.promo_price < bundle.base_price && (
+                              <span className="text-xs text-gray-500 ml-1">
+                                (was ₦{bundle.base_price.toLocaleString()})
                               </span>
                             )}
-                          </button>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button asChild size="sm" variant="ghost">
-                              <Link href={`/admin/cbt/bundles/${bundle.id}/edit`}>
-                                <Edit2 className="w-4 h-4" />
-                              </Link>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDelete(bundle.id)}
-                              disabled={deleting === bundle.id}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Courses:</span>
+                        <span>{bundle.course_ids?.length || 0}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Validity:</span>
+                        <span>{bundle.validity_days || 0} days</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Active Subs:</span>
+                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">
+                          {bundle.active_subscriptions || 0}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Total Subs:</span>
+                        <span>{bundle.total_subscriptions || 0}</span>
+                      </div>
+                      
+                      {!bundleIsFree && bundle.total_revenue > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">Revenue:</span>
+                          <span className="text-green-600 font-semibold">
+                            ₦{bundle.total_revenue.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-        {/* Pricing Info */}
-        <Card className="bg-blue-50 border-blue-200">
-          <CardHeader>
-            <CardTitle className="text-base">Pricing Structure</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-blue-900 space-y-2">
-            <p>
-              <strong>Student Pays:</strong> Base Price - Discount Amount
-            </p>
-            <p>
-              <strong>Referrer Earns:</strong> Fixed commission amount per sale
-            </p>
-            <p>
-              <strong>Platform Keeps:</strong> Student Pays - Referrer Commission
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+                  {/* Right Side - Actions */}
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => router.push(`/admin/cbt/bundles/${bundle.id}/edit`)}
+                      className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                      title="Edit Bundle"
+                    >
+                      ✏️ Edit
+                    </button>
+                    
+                    <button
+                      onClick={() => handleToggle(bundle.id)}
+                      className={`px-4 py-2 rounded-lg transition font-medium ${
+                        bundle.is_active
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                      title={bundle.is_active ? 'Deactivate' : 'Activate'}
+                    >
+                      {bundle.is_active ? '✓ Active' : '○ Inactive'}
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDelete(bundle.id)}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition font-medium"
+                      title="Delete Bundle"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
-  );
+  )
 }

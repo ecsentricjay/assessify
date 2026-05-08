@@ -15,7 +15,8 @@ import {
   Settings,
   ShieldCheck,
   ChevronDown,
-  Trophy
+  Trophy,
+  Sparkles
 } from 'lucide-react'
 import { useState } from 'react'
 import { useSidebar } from '@/lib/context/sidebar-context'
@@ -58,6 +59,16 @@ const navigation = [
       { name: 'Subscriptions', href: '/admin/cbt/subscriptions' },
       { name: 'Analytics', href: '/admin/cbt/analytics' },
       { name: 'Leaderboard', href: '/admin/cbt/leaderboard' },
+    ]
+  },
+  {
+    name: 'Study Aid',
+    href: '/admin/study-aid',
+    icon: Sparkles,
+    submenu: [
+      { name: 'Dashboard', href: '/admin/study-aid' },
+      { name: 'Students', href: '/admin/study-aid/students' },
+      { name: 'Settings', href: '/admin/study-aid/settings' },
     ]
   },
   {

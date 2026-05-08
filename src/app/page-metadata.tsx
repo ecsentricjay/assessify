@@ -3,7 +3,7 @@ import { createMetadata, createPageSchema } from '@/lib/seo/metadata'
 
 export const metadata: Metadata = createMetadata({
   title: 'Assessify - Online Assessment Platform for Nigerian Students',
-  description: 'Master JAMB, WAEC, NECO with 1000+ past questions. AI-powered grading, continuous assessment tracking, and exam preparation for Nigerian students.',
+  description: 'AI-powered grading, continuous assessment tracking, and exam preparation for Nigerian students.',
   keywords: [
     'CBT platform Nigeria',
     'online exam practice',

@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { checkInstitutionalCoverage } from './institution.actions'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { calculateRevenueSplit } from '@/lib/utils/revenue-split'
 import { recordPartnerEarning } from '@/lib/actions/partner-earnings.actions'
@@ -44,6 +45,11 @@ export interface ProcessSubmissionPaymentResult {
 /**
  * Process payment for assignment/test submission
  */
+// ─── ADD THIS IMPORT at the top of transaction.actions.ts ────────────────────
+// import { checkInstitutionalCoverage } from './institution.actions'
+//
+// Then REPLACE the processSubmissionPayment function with this:
+
 export async function processSubmissionPayment(
   data: ProcessSubmissionPaymentData
 ): Promise<ProcessSubmissionPaymentResult> {
@@ -52,6 +58,132 @@ export async function processSubmissionPayment(
 
   try {
     console.log('💳 Processing submission payment:', data)
+
+    // ── STEP 0: Check institutional coverage ─────────────────────────────────
+    const coverage = await checkInstitutionalCoverage(data.studentId)
+    console.log('🏫 Institutional coverage:', coverage)
+
+    if (coverage.hasInstitution) {
+      if (coverage.isExpired) {
+        // Hard block — license expired
+        return {
+          success: false,
+          error: `Your institution's license has expired. Please contact your institution administrator to renew access.`,
+        }
+      }
+
+      if (coverage.isCovered) {
+        // Institution covers this submission — skip student wallet deduction
+        console.log('✅ Submission covered by institution:', coverage.institutionName)
+
+        const lecturerEarning = coverage.lecturerEarning
+
+        // Get lecturer wallet and credit them at the agreed institutional rate
+        if (lecturerEarning > 0) {
+          const { data: lecturerWallet } = await supabase
+            .from('wallets')
+            .select('*')
+            .eq('user_id', data.lecturerId)
+            .single()
+
+          if (lecturerWallet) {
+            const lecturerBalance = Number(lecturerWallet.balance)
+            const newLecturerBalance = lecturerBalance + lecturerEarning
+
+            await supabase
+              .from('wallets')
+              .update({
+                balance: newLecturerBalance,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('user_id', data.lecturerId)
+
+            // Record lecturer earning transaction
+            await adminClient.from('transactions').insert({
+              wallet_id: lecturerWallet.id,
+              type: 'credit',
+              purpose: data.sourceType === 'assignment_submission'
+                ? 'assignment_payment'
+                : 'test_payment',
+              amount: lecturerEarning,
+              balance_before: lecturerBalance,
+              balance_after: newLecturerBalance,
+              reference: `INST-EARN-${data.submissionId.substring(0, 8)}-${Date.now()}`,
+              description: `Institutional earning: ${data.purpose}`,
+              status: 'completed',
+              institution_id: coverage.institutionId,
+              metadata: {
+                source_type: data.sourceType,
+                source_id: data.sourceId,
+                submission_id: data.submissionId,
+                student_id: data.studentId,
+                covered_by: 'institution',
+                institution_id: coverage.institutionId,
+              },
+            })
+
+            console.log('✅ Lecturer credited ₦', lecturerEarning, 'from institution')
+          }
+        }
+
+        // Record a zero-cost transaction for the student (for audit trail)
+        const { data: studentWallet } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', data.studentId)
+          .single()
+
+        if (studentWallet) {
+          await adminClient.from('transactions').insert({
+            wallet_id: studentWallet.id,
+            type: 'debit',
+            purpose: data.sourceType === 'assignment_submission'
+              ? 'assignment_payment'
+              : 'test_payment',
+            amount: 0,
+            balance_before: Number(studentWallet.balance),
+            balance_after: Number(studentWallet.balance),
+            reference: `INST-SUB-${data.submissionId.substring(0, 8)}-${Date.now()}`,
+            description: `${data.purpose} (covered by ${coverage.institutionName})`,
+            status: 'completed',
+            institution_id: coverage.institutionId,
+            metadata: {
+              source_type: data.sourceType,
+              source_id: data.sourceId,
+              submission_id: data.submissionId,
+              covered_by: 'institution',
+              institution_id: coverage.institutionId,
+            },
+          })
+        }
+
+        // Notify student
+        try {
+          await supabase.from('notifications').insert({
+            user_id: data.studentId,
+            type: 'payment_deducted',
+            title: 'Submission Free',
+            message: `Your submission was covered by ${coverage.institutionName}`,
+            metadata: { covered_by: 'institution', institution_id: coverage.institutionId },
+          })
+        } catch (notifError) {
+          // non-blocking
+        }
+
+        return {
+          success: true,
+          transactionId: undefined,
+          split: {
+            lecturerAmount: lecturerEarning,
+            partnerAmount: 0,
+            platformAmount: 0,
+          },
+        }
+      }
+    }
+    // ── END INSTITUTIONAL CHECK ───────────────────────────────────────────────
+    // If we reach here: student has no institution, or institution is on free plan
+    // → proceed with normal personal wallet payment flow below
 
     // 1. Calculate revenue split
     const split = await calculateRevenueSplit(data.submissionAmount, data.lecturerId)
@@ -74,9 +206,9 @@ export async function processSubmissionPayment(
 
     // 3. Check if student has sufficient balance
     if (studentBalance < data.submissionAmount) {
-      return { 
-        success: false, 
-        error: `Insufficient balance. Required: ₦${data.submissionAmount}, Available: ₦${studentBalance}` 
+      return {
+        success: false,
+        error: `Insufficient balance. Required: ₦${data.submissionAmount}, Available: ₦${studentBalance}`,
       }
     }
 
@@ -87,7 +219,7 @@ export async function processSubmissionPayment(
       .update({
         balance: newStudentBalance,
         total_spent: Number(studentWallet.total_spent || 0) + data.submissionAmount,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', data.studentId)
 
@@ -107,12 +239,11 @@ export async function processSubmissionPayment(
 
     if (lecturerWalletError || !lecturerWallet) {
       console.error('❌ Lecturer wallet error:', lecturerWalletError)
-      // Rollback student deduction
       await supabase
         .from('wallets')
-        .update({ 
+        .update({
           balance: studentBalance,
-          total_spent: Number(studentWallet.total_spent || 0)
+          total_spent: Number(studentWallet.total_spent || 0),
         })
         .eq('user_id', data.studentId)
       return { success: false, error: 'Lecturer wallet not found' }
@@ -125,18 +256,17 @@ export async function processSubmissionPayment(
       .from('wallets')
       .update({
         balance: newLecturerBalance,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', data.lecturerId)
 
     if (creditError) {
       console.error('❌ Credit error:', creditError)
-      // Rollback student deduction
       await supabase
         .from('wallets')
-        .update({ 
+        .update({
           balance: studentBalance,
-          total_spent: Number(studentWallet.total_spent || 0)
+          total_spent: Number(studentWallet.total_spent || 0),
         })
         .eq('user_id', data.studentId)
       return { success: false, error: 'Failed to credit lecturer wallet' }
@@ -144,7 +274,7 @@ export async function processSubmissionPayment(
 
     console.log('✅ Credited lecturer wallet. New balance:', newLecturerBalance)
 
-    // 7. Create transaction record for STUDENT (debit) - USE ADMIN CLIENT
+    // 7. Create student transaction (debit)
     const { data: studentTransaction, error: studentTxError } = await adminClient
       .from('transactions')
       .insert({
@@ -178,7 +308,7 @@ export async function processSubmissionPayment(
       console.log('✅ Student transaction created:', studentTransaction?.id)
     }
 
-    // 8. Create transaction record for LECTURER (credit) - USE ADMIN CLIENT
+    // 8. Create lecturer transaction (credit)
     const { data: lecturerTransaction, error: lecturerTxError } = await adminClient
       .from('transactions')
       .insert({
@@ -207,35 +337,26 @@ export async function processSubmissionPayment(
       console.log('✅ Lecturer transaction created:', lecturerTransaction?.id)
     }
 
-    // 9. Record in lecturer_earnings table - USE ADMIN CLIENT
+    // 9. Record lecturer_earnings
     try {
-      const { data: earningRecord, error: earningError } = await adminClient
-        .from('lecturer_earnings')
-        .insert({
-          lecturer_id: data.lecturerId,
-          transaction_id: lecturerTransaction?.id || studentTransaction?.id,
-          amount: split.lecturerAmount,
-          source_type: data.sourceType === 'assignment_submission' ? 'assignment' : 'test',
-          source_id: data.sourceId,
-          revenue_share_percentage: 50,
-          withdrawn: false,
-          earned_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-      
-      if (earningError) {
-        console.error('❌ Failed to create lecturer earning record:', earningError)
-      } else {
-        console.log('✅ Lecturer earning record created:', earningRecord?.id)
-      }
+      await adminClient.from('lecturer_earnings').insert({
+        lecturer_id: data.lecturerId,
+        transaction_id: lecturerTransaction?.id || studentTransaction?.id,
+        amount: split.lecturerAmount,
+        source_type: data.sourceType === 'assignment_submission' ? 'assignment' : 'test',
+        source_id: data.sourceId,
+        revenue_share_percentage: 50,
+        withdrawn: false,
+        earned_at: new Date().toISOString(),
+      })
     } catch (earningError) {
       console.error('❌ Error creating lecturer earning:', earningError)
     }
 
-    // 10. Record partner earning (if applicable)
+    // 10. Record partner earning
     if (split.hasPartner && split.partnerId && studentTransaction) {
       try {
+        const { recordPartnerEarning } = await import('./partner-earnings.actions')
         await recordPartnerEarning({
           lecturerId: data.lecturerId,
           transactionId: studentTransaction.id,
@@ -252,17 +373,14 @@ export async function processSubmissionPayment(
       }
     }
 
-    // 11. Send notifications
+    // 11. Notifications
     try {
       await supabase.from('notifications').insert({
         user_id: data.studentId,
         type: 'payment_deducted',
         title: 'Payment Deducted',
         message: `₦${data.submissionAmount.toLocaleString()} deducted for ${data.sourceType.replace('_', ' ')}`,
-        metadata: {
-          amount: data.submissionAmount,
-          transaction_id: studentTransaction?.id,
-        },
+        metadata: { amount: data.submissionAmount, transaction_id: studentTransaction?.id },
       })
 
       await supabase.from('notifications').insert({
@@ -270,13 +388,8 @@ export async function processSubmissionPayment(
         type: 'payment_received',
         title: 'Payment Received',
         message: `You received ₦${split.lecturerAmount.toLocaleString()} from a submission`,
-        metadata: {
-          amount: split.lecturerAmount,
-          transaction_id: lecturerTransaction?.id,
-        },
+        metadata: { amount: split.lecturerAmount, transaction_id: lecturerTransaction?.id },
       })
-
-      console.log('✅ Notifications sent')
     } catch (notifError) {
       console.error('Failed to send notifications:', notifError)
     }
@@ -295,7 +408,6 @@ export async function processSubmissionPayment(
     return { success: false, error: 'Failed to process payment' }
   }
 }
-
 /**
  * Helper function to check if student has sufficient balance
  */

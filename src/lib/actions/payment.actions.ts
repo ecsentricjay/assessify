@@ -1,6 +1,7 @@
 // lib/actions/payment.actions.ts
 'use server'
 
+import { activateInstitutionLicense } from '@/lib/actions/institution.actions'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/actions/auth.actions'
@@ -355,6 +356,74 @@ export async function handlePaystackWebhook(
 
       console.log('DVA activated for user:', authUser.id, dedicatedAccount.account_number)
       return { success: true, message: 'DVA activated successfully' }
+    }
+
+    // ── Institutional License Payment ──────────────────────────────────
+    if (event.event === 'charge.success') {
+      const data = event.data
+      const metadata = data?.metadata
+
+      // ── Check if this is an institutional license payment ─────────────────
+      if (metadata?.license_type === 'institutional') {
+        const reference = data?.reference
+
+        console.log('🏫 Institutional license payment webhook received:', {
+          reference,
+          amount: data?.amount,
+          institution_id: metadata?.institution_id,
+          billing_cycle: metadata?.billing_cycle,
+          student_count: metadata?.student_count,
+        })
+
+        if (!reference) {
+          return { success: false, message: 'No reference in license payment webhook' }
+        }
+
+        // Idempotency — check if already activated
+        const { data: existingPayment } = await adminClient
+          .from('institutional_license_payments')
+          .select('id, status')
+          .eq('paystack_reference', reference)
+          .maybeSingle()
+
+        if (existingPayment?.status === 'active') {
+          console.log('License already activated for reference:', reference)
+          return { success: true, message: 'License already activated' }
+        }
+
+        // Activate the license
+        const activationResult = await activateInstitutionLicense(reference)
+
+        if (!activationResult.success) {
+          console.error('❌ License activation failed:', activationResult.error)
+          return { success: false, message: activationResult.error || 'License activation failed' }
+        }
+
+        // Notify the institution admin
+        if (metadata?.user_id) {
+          try {
+            await adminClient
+              .from('notifications')
+              .insert({
+                user_id: metadata.user_id,
+                type: 'payment_received',
+                title: 'License Activated',
+                message: `Your institutional license has been activated successfully. ${metadata.student_count} students are now covered.`,
+                metadata: {
+                  institution_id: metadata.institution_id,
+                  billing_cycle: metadata.billing_cycle,
+                  student_count: metadata.student_count,
+                  reference,
+                },
+              })
+          } catch (e: any) {
+            console.error('Failed to send license activation notification:', e)
+          }
+        }
+
+        console.log('✅ Institutional license activated for institution:', metadata?.institution_id)
+        return { success: true, message: 'Institutional license activated successfully' }
+      }
     }
 
     // ── Bank Transfer via DVA ───────────────────────────────────────────

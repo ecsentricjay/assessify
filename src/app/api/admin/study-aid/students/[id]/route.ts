@@ -5,9 +5,10 @@ import { getCurrentUser } from '@/lib/actions/auth.actions';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await getCurrentUser();
     
     if (!user || user.profile?.role !== 'admin') {
@@ -17,7 +18,7 @@ export async function PATCH(
       );
     }
 
-    const studentId = params.id;
+    const studentId = id;
     const body = await request.json();
     const { totalFreeAttempts, purchasedAttempts } = body;
 

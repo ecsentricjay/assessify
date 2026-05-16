@@ -37,6 +37,7 @@ export async function signUp(formData: {
   level?: number
   phone: string
   referralCode?: string
+  institutionCode?: string // optional — for self-registration
 }) {
   const supabase = await createClient()
   const adminClient = createServiceClient()
@@ -110,6 +111,20 @@ export async function signUp(formData: {
   if (profileError) {
     console.error('Profile creation error:', profileError)
     return { error: profileError.message }
+  }
+
+  // Link to institution if self-register code provided
+  if (formData.institutionCode) {
+    const { validateInstitutionCode } = await import('./institution.actions')
+    const codeResult = await validateInstitutionCode(formData.institutionCode)
+    
+    if (codeResult.valid && codeResult.institution) {
+      await adminClient
+        .from('profiles')
+        .update({ institution_id: codeResult.institution.id })
+        .eq('id', authData.user.id)
+    }
+    // Non-blocking — don't fail signup if code is invalid
   }
 
   // Create Dedicated Virtual Account for all users
@@ -257,6 +272,8 @@ export async function signIn(email: string, password: string) {
     redirect('/student/dashboard')
   } else if (profile.role === 'lecturer') {
     redirect('/lecturer/dashboard')
+  } else if (profile.role === 'institution_admin') {
+    redirect('/institution/dashboard')
   } else if (profile.role === 'admin') {
     redirect('/admin')
   } else if (profile.role === 'partner') {

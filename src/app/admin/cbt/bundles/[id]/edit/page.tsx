@@ -2,9 +2,10 @@ import AdminBundleForm from '@/components/admin/cbt/AdminBundleForm'
 import { getBundleById } from '@/lib/actions/admin-cbt-bundles.actions'
 import { getAllCourses } from '@/lib/actions/admin-cbt-courses.actions'
 
-export default async function EditBundlePage({ params }: { params: { id: string } }) {
+export default async function EditBundlePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const [bundleResult, coursesResult] = await Promise.all([
-    getBundleById(params.id),
+    getBundleById(id),
     getAllCourses(),
   ])
 

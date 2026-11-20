@@ -1,0 +1,23 @@
+{
+  "name": "Assessify — Free JAMB CBT Practice & Assessments",
+  "short_name": "Assessify",
+  "description": "Practise JAMB CBT with timed tests, worked solutions and instant scoring. Assessments, AI Study Aid and more for Nigerian students and lecturers.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#2563EB",
+  "lang": "en-NG",
+  "categories": ["education"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "JAMB CBT Practice", "short_name": "Practice", "url": "/student/cbt/courses", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My Dashboard", "short_name": "Dashboard", "url": "/student/dashboard", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

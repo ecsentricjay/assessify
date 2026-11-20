@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { createOrganizationSchema, SITE_URL } from "@/lib/seo/metadata";
+import { PwaInstall } from "@/components/pwa/PwaInstall";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,7 +14,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#2563EB",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
+  applicationName: "Assessify",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: "Assessify", statusBarStyle: "default" },
   metadataBase: new URL(SITE_URL),
   title: "Assessify - Online Assessment Platform for Tertiary Institutions | Nigeria",
   description: "Premium online assessment platform for students and Lecturers in Nigeria.",
@@ -32,7 +42,7 @@ export const metadata: Metadata = {
   ],
   icons: {
     icon: '/images/logo/assessify-favicon.ico',
-    apple: '/images/logo/assessify-logo-icon.png',
+    apple: '/icons/apple-touch-icon.png',
   },
   openGraph: {
     type: "website",
@@ -100,14 +110,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
 
-        {/* Manifest for PWA */}
-        <link rel="manifest" href="/manifest.json" />
-        
-        {/* Theme color */}
-        <meta name="theme-color" content="#2563EB" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
+        <PwaInstall />
       </body>
     </html>
   );

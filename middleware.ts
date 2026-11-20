@@ -168,10 +168,10 @@ export const config = {
      * Match all request paths EXCEPT:
      * - _next/static (static files)
      * - _next/image (image optimization)
-     * - favicon.ico
+     * - favicon.ico, PWA files (manifest, service worker, offline page)
      * - Public assets (svg, png, jpg, jpeg, gif, webp)
      * - API routes (handled separately)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|offline.html|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

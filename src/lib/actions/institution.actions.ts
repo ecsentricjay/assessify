@@ -5,6 +5,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from './auth.actions'
 import { initializePaystackTransaction, verifyPaystackTransaction, formatAmountToKobo } from '@/lib/services/paystack.service'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 function createServiceClient() {
   return createAdminClient(
@@ -498,7 +499,7 @@ export async function initializeLicensePayment(data: {
     reference,
     amount: formatAmountToKobo(totalAmount),
     email: user.email || '',
-    callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/institution/license/callback`,
+    callback_url: `${getSiteUrl()}/institution/license/callback`,
     metadata: {
       user_id: user.id,
       transaction_type: 'wallet_funding', // reuse existing type for Paystack

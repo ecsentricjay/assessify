@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import DashboardHeader from '@/components/dashboard/dashboard-header'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, GraduationCap, ArrowRight } from 'lucide-react'
+import { isSubscriptionRequired } from '@/lib/services/cbt-access.service'
 import { RecentActivityContent } from '@/components/dashboard/recent-activity-content'
 import { StudentWalletCard } from '@/components/dashboard/student-wallet-card'
 
@@ -24,8 +25,10 @@ export default async function StudentDashboard() {
     redirect('/') // Redirect non-students
   }
 
-  // Get enrolled courses
-  const { courses } = await getStudentCourses()
+  const isJambite = user.profile?.student_type === 'jambite'
+
+  // Get enrolled courses (Jambites have none)
+  const { courses } = isJambite ? { courses: [] as any[] } : await getStudentCourses()
   const enrolledCount = courses?.length || 0
 
   // Get wallet balance
@@ -38,14 +41,16 @@ export default async function StudentDashboard() {
 
   const walletBalance = wallet?.balance || 0
 
+  const cbtFree = !(await isSubscriptionRequired())
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ✅ Use client component wrapper for header */}
       <DashboardHeader
         title="Assessify"
-        subtitle="Student Dashboard"
+        subtitle={isJambite ? 'JAMB Prep Dashboard' : 'Student Dashboard'}
         userName={`${user.profile.first_name} ${user.profile.last_name}`}
-        userDetail={user.profile.matric_number || ''}
+        userDetail={isJambite ? 'Jambite' : (user.profile.matric_number || '')}
       />
 
       {/* Main Content */}
@@ -56,11 +61,46 @@ export default async function StudentDashboard() {
             Welcome back, {user.profile.first_name}! 👋
           </h2>
           <p className="text-gray-600">
-            {user.profile.department} • {user.profile.level} Level
+            {isJambite
+              ? [
+                  [user.profile.jamb_institution_1, user.profile.jamb_institution_2].filter(Boolean).join(' / '),
+                  [user.profile.jamb_course_1, user.profile.jamb_course_2].filter(Boolean).join(' / '),
+                ].filter(Boolean).join(' • ')
+              : `${user.profile.department} • ${user.profile.level} Level`}
           </p>
         </div>
 
+        {/* JAMB CBT campaign banner — Jambites only */}
+        {isJambite && (
+        <Link href="/student/cbt/courses" className="group mb-8 block overflow-hidden rounded-2xl bg-linear-to-br from-[#030D2A] via-[#071650] to-[#1565F5] p-6 text-white shadow-lg transition hover:shadow-xl sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-white/10 p-3">
+                <GraduationCap className="h-8 w-8 text-yellow-300" />
+              </div>
+              <div>
+                <span className="mb-2 inline-block rounded-full bg-yellow-300 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-gray-900">
+                  {cbtFree ? 'Free for every student' : 'JAMB CBT Practice'}
+                </span>
+                <h3 className="text-2xl font-extrabold leading-tight sm:text-3xl">Improve your JAMB score 🎯</h3>
+                <p className="mt-1 max-w-xl text-sm text-blue-100 sm:text-base">
+                  {cbtFree ? 'Free timed' : 'Timed'} JAMB CBT practice with worked solutions and instant scoring. Pick a subject and start in seconds.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-5 py-3 font-semibold text-[#071650] transition group-hover:bg-yellow-300">
+              Start practising <ArrowRight className="h-4 w-4" />
+            </span>
+          </div>
+        </Link>
+        )}
+
         {/* Stats Grid */}
+        {isJambite ? (
+          <div className="mb-8 max-w-sm">
+            <StudentWalletCard balance={walletBalance} />
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="pb-3">
@@ -97,8 +137,10 @@ export default async function StudentDashboard() {
 
           <StudentWalletCard balance={walletBalance} />
         </div>
+        )}
 
         {/* NEW: AI Assignment Writer Highlight Card */}
+        {!isJambite && (
         <Card className="mb-8 border-2 border-primary/20 bg-linear-to-br from-primary/5 via-primary/3 to-background shadow-lg">
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -165,6 +207,8 @@ export default async function StudentDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        )}
 
         {/* NEW: AI Study Aid Highlight Card */}
         <Card className="mb-8 border-2 border-blue-300 bg-linear-to-br from-blue-50 via-indigo-50 to-blue-100 shadow-lg hover:shadow-xl transition-all">
@@ -235,7 +279,37 @@ export default async function StudentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Quick links for Jambites */}
+        {isJambite && (
+          <p className="mb-4 text-sm text-gray-600">
+            Got admission? <Link href="/student/profile" className="font-semibold text-blue-600 hover:underline">Upgrade to a full student account</Link>
+          </p>
+        )}
+        {isJambite && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[
+              { href: '/student/cbt/courses', emoji: '📝', title: 'Practice Tests', desc: 'Pick a subject and start' },
+              { href: '/student/cbt/leaderboard', emoji: '🏆', title: 'Leaderboard', desc: 'See how you rank' },
+              { href: '/student/wallet', emoji: '💰', title: 'Wallet', desc: 'Fund & manage balance' },
+              { href: '/student/profile', emoji: '⚙️', title: 'Profile', desc: 'Update your JAMB choices' },
+            ].map((l) => (
+              <Link key={l.href} href={l.href}>
+                <Card className="h-full hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <div className="text-3xl mb-1">{l.emoji}</div>
+                    <CardTitle className="text-base">{l.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600">{l.desc}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Quick Actions (university students only) */}
+        {!isJambite && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
@@ -338,12 +412,15 @@ export default async function StudentDashboard() {
           </Card>
         </div>
 
+        )}
+
         {/* Promo Code Card for Referrals */}
         <div className="mb-8">
           {/* Placeholder - PromoCodeCard moved to focus on core features */}
         </div>
 
         {/* Recent Activity */}
+        {!isJambite && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
@@ -352,6 +429,7 @@ export default async function StudentDashboard() {
             <RecentActivityContent userId={user.id} enrolledCount={enrolledCount} />
           </CardContent>
         </Card>
+        )}
       </main>
     </div>
   )

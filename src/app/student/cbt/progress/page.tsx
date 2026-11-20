@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { getMyPracticeSessions } from '@/lib/actions/student-cbt-practice.actions';
+import { getMyPracticeSessions, getMyTopicPerformance } from '@/lib/actions/student-cbt-practice.actions';
 
 // ==================== TYPES ====================
 
@@ -114,7 +114,7 @@ function organizeByCoursee(sessions: any[]): CourseProgress[] {
       if (!courseMap.has(courseId)) {
         courseMap.set(courseId, {
           courseId,
-          courseName: session.course?.course_title || 'Unknown Course',
+          courseName: session.course?.course_title || 'Unknown Subject',
           courseCode: session.course?.course_code || 'N/A',
           sessionsCompleted: 0,
           totalScore: 0,
@@ -377,12 +377,74 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
                 Try Again
               </Button>
               <Link href="/student/cbt/courses">
-                <Button variant="outline">Back to Courses</Button>
+                <Button variant="outline">Back to Subjects</Button>
               </Link>
             </div>
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+
+interface TopicStat {
+  courseId: string;
+  courseTitle: string;
+  topic: string;
+  answered: number;
+  correct: number;
+  accuracy: number;
+}
+
+/** Accuracy per topic, grouped by subject, weakest first — built from the topic column of the questions */
+function TopicPerformance({ topics }: { topics: TopicStat[] }) {
+  if (topics.length === 0) return null;
+
+  const bySubject = new Map<string, { title: string; items: TopicStat[] }>();
+  topics.forEach((t) => {
+    const g = bySubject.get(t.courseId) ?? { title: t.courseTitle, items: [] };
+    g.items.push(t);
+    bySubject.set(t.courseId, g);
+  });
+  const groups = [...bySubject.values()].sort((a, b) => a.title.localeCompare(b.title));
+
+  const tone = (acc: number) => (acc >= 70 ? 'bg-emerald-500' : acc >= PASSING_SCORE ? 'bg-amber-500' : 'bg-rose-500');
+
+  return (
+    <div className="mt-10">
+      <div className="mb-2 flex items-center gap-2">
+        <Target className="h-5 w-5 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Topic Performance</h2>
+      </div>
+      <p className="mb-6 text-sm text-gray-600">Your accuracy on each topic across all completed tests. Weakest topics come first, so start there.</p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {groups.map((g) => (
+          <Card key={g.title}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{g.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {g.items
+                .sort((a, b) => a.accuracy - b.accuracy || b.answered - a.answered)
+                .map((t) => (
+                  <div key={t.topic}>
+                    <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                      <span className="truncate text-gray-800">{t.topic}</span>
+                      <span className="shrink-0 font-semibold text-gray-900">
+                        {t.accuracy}% <span className="font-normal text-gray-500">({t.correct}/{t.answered})</span>
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div className={`h-full rounded-full ${tone(t.accuracy)}`} style={{ width: `${t.accuracy}%` }} />
+                    </div>
+                  </div>
+                ))}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -418,6 +480,7 @@ export default function ProgressPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<PracticeSession[]>([]);
+  const [topicStats, setTopicStats] = useState<TopicStat[]>([]);
 
   useEffect(() => {
     loadProgress();
@@ -436,6 +499,7 @@ export default function ProgressPage() {
       }
 
       setSessions(response.sessions || []);
+      getMyTopicPerformance().then((r) => r.success && setTopicStats(r.topics as TopicStat[]));
       toast.success('Progress loaded!');
     } catch (err) {
       console.error('[ProgressPage] Error:', err);
@@ -484,7 +548,7 @@ export default function ProgressPage() {
           <div className="lg:col-span-2">
             <div className="mb-6 flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-blue-600" />
-              <h2 className="text-2xl font-bold text-gray-900">Course Progress</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Subject Progress</h2>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -499,6 +563,8 @@ export default function ProgressPage() {
             <RecentSessions sessions={sessions} />
           </div>
         </div>
+
+        <TopicPerformance topics={topicStats} />
 
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">

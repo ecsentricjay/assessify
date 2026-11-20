@@ -1,357 +1,435 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { getPracticeConfigOptions, startPracticeSession } from '@/lib/actions/student-cbt-practice.actions';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, HelpCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import {
+  ArrowLeft,
+  BookOpenCheck,
+  Clock,
+  Gift,
+  GraduationCap,
+  Loader2,
+  Play,
+  RotateCcw,
+  Timer,
+  Zap,
+} from 'lucide-react';
 
-interface ConfigOptions {
-  courseTitle: string;
-  totalQuestions: number;
-  questionsByDifficulty: {
-    easy: number;
-    medium: number;
-    hard: number;
-  };
-}
+import { Button } from '@/components/ui/button';
+import {
+  abandonSession,
+  getPracticeConfigOptions,
+  startPracticeSession,
+} from '@/lib/actions/student-cbt-practice.actions';
+import type { CbtDifficulty, CbtMode, PracticeConfig } from '@/lib/types/cbt.types';
+import { cn } from '@/lib/utils';
 
-export default function PracticeConfigPage() {
+type PresetId = 'quick' | 'standard' | 'jamb' | 'custom';
+
+const TIME_OPTIONS: Array<{ label: string; value: number | null }> = [
+  { label: 'No timer', value: null },
+  { label: '10 min', value: 10 },
+  { label: '15 min', value: 15 },
+  { label: '20 min', value: 20 },
+  { label: '30 min', value: 30 },
+  { label: '45 min', value: 45 },
+  { label: '60 min', value: 60 },
+];
+
+const DIFFICULTIES: Array<{ id: CbtDifficulty | 'all'; label: string }> = [
+  { id: 'all', label: 'Mixed' },
+  { id: 'easy', label: 'Easy' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'hard', label: 'Hard' },
+];
+
+export default function PracticeSetupPage() {
   const params = useParams();
   const router = useRouter();
   const courseId = params.courseId as string;
 
+  const [config, setConfig] = useState<PracticeConfig | null>(null);
+  const [error, setError] = useState<{ message: string; needsSubscription: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
-  const [config, setConfig] = useState<ConfigOptions | null>(null);
-  const [formData, setFormData] = useState({
-    questionCount: 10,
-    difficulty: 'all' as 'all' | 'easy' | 'medium' | 'hard',
-    timePerQuestion: 60,
-  });
+
+  const [preset, setPreset] = useState<PresetId>('standard');
+  const [mode, setMode] = useState<CbtMode>('exam');
+  const [count, setCount] = useState(20);
+  const [timeLimit, setTimeLimit] = useState<number | null>(20);
+  const [difficulty, setDifficulty] = useState<CbtDifficulty | 'all'>('all');
+  const [topicIds, setTopicIds] = useState<string[]>([]);
 
   useEffect(() => {
-    loadConfig();
+    let cancelled = false;
+    (async () => {
+      const res = await getPracticeConfigOptions(courseId);
+      if (cancelled) return;
+      if (res.success) {
+        setConfig(res.config);
+      } else {
+        setError({ message: res.error ?? 'Could not load this subject', needsSubscription: 'needsSubscription' in res && !!res.needsSubscription });
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
 
-  async function loadConfig() {
-    try {
-      setLoading(true);
-      const res = await getPracticeConfigOptions(courseId);
-      
-      if (res.success && res.config) {
-        setConfig(res.config);
-        // Set initial question count to min(10, available questions)
-        setFormData((prev) => ({
-          ...prev,
-          questionCount: Math.min(10, res.config.totalQuestions),
-        }));
-      } else {
-        toast.error(res.error || 'Failed to load practice options');
-        router.push('/student/cbt/courses');
-      }
-    } catch (error) {
-      console.error('[loadConfig]', error);
-      toast.error('An error occurred');
-      router.push('/student/cbt/courses');
-    } finally {
-      setLoading(false);
+  const isEnglish = /english/i.test(config?.courseTitle ?? '');
+  const jambCount = isEnglish ? 60 : 40;
+
+  const available = useMemo(() => {
+    if (!config) return 0;
+    let n = difficulty === 'all' ? config.totalQuestions : config.questionsByDifficulty[difficulty];
+    if (topicIds.length > 0) {
+      // Topic counts ignore difficulty, so this is an upper bound; the server picks what really matches
+      n = Math.min(n, config.topics.filter((t) => topicIds.includes(t.id)).reduce((sum, t) => sum + t.count, 0));
+    }
+    return n;
+  }, [config, difficulty, topicIds]);
+
+  const effectiveCount = Math.min(count, Math.max(available, 1));
+
+  function applyPreset(id: PresetId) {
+    if (!config) return;
+    setPreset(id);
+    if (id === 'quick') {
+      setMode('study');
+      setCount(Math.min(10, config.totalQuestions));
+      setTimeLimit(null);
+      setDifficulty('all');
+      setTopicIds([]);
+    } else if (id === 'standard') {
+      setMode('exam');
+      setCount(Math.min(20, config.totalQuestions));
+      setTimeLimit(20);
+      setDifficulty('all');
+      setTopicIds([]);
+    } else if (id === 'jamb') {
+      setMode('exam');
+      setCount(Math.min(jambCount, config.totalQuestions));
+      setTimeLimit(Math.ceil(Math.min(jambCount, config.totalQuestions) * 0.75));
+      setDifficulty('all');
+      setTopicIds([]);
     }
   }
 
-  async function handleStartPractice() {
+  // Start with the standard preset sized to the question bank
+  useEffect(() => {
+    if (config) applyPreset('standard');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.courseId]);
+
+  const touch = () => setPreset('custom');
+
+  async function handleStart() {
     if (!config) return;
-
-    if (formData.questionCount < 1) {
-      toast.error('Please select at least 1 question');
-      return;
-    }
-
     setStarting(true);
-    try {
-      console.log('[handleStartPractice] Starting with:', { courseId, questionCount: formData.questionCount });
-      
-      const res = await startPracticeSession({
-        courseId,
-        questionCount: formData.questionCount,
-      });
-
-      console.log('[handleStartPractice] Response:', res);
-
-      if (!res) {
-        toast.error('No response from server');
-        return;
-      }
-
-      if (res.success && res.session) {
-        console.log('[handleStartPractice] ✅ Session created:', res.session.id);
-        
-        // ✅ Store session data in localStorage for the practice page
-        localStorage.setItem(
-          `practice_session_${res.session.id}`,
-          JSON.stringify(res.session)
-        );
-        
-        toast.success('Practice session started!');
-        router.push(`/student/cbt/practice/session/${res.session.id}`);
-      } else {
-        console.error('[handleStartPractice] ❌ Error:', res);
-        toast.error(!res.success ? res.error : 'Failed to start practice session');
-      }
-    } catch (error) {
-      console.error('[handleStartPractice] Exception:', error);
-      toast.error('An error occurred while starting the session');
-    } finally {
+    const res = await startPracticeSession({
+      courseId,
+      questionCount: effectiveCount,
+      difficulty,
+      topicIds: topicIds.length ? topicIds : undefined,
+      timeLimitMinutes: timeLimit,
+      mode,
+    });
+    if (res.success) {
+      router.push(`/student/cbt/practice/session/${res.sessionId}`);
+    } else {
+      toast.error(res.error || 'Could not start the session');
       setStarting(false);
     }
   }
 
+  async function handleDiscard() {
+    if (!config?.activeSession) return;
+    await abandonSession(config.activeSession.id);
+    setConfig({ ...config, activeSession: null });
+    toast.success('Previous session discarded');
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Loading practice options...</p>
-        </div>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
       </div>
     );
   }
 
-  if (!config) {
+  if (error || !config) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-2xl mx-auto">
-          <Button asChild variant="ghost" className="mb-6">
-            <Link href="/student/cbt/courses">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Courses
-            </Link>
+      <div className="mx-auto max-w-lg px-4 py-16 text-center">
+        <p className="mb-6 text-lg text-slate-700">{error?.message ?? 'Something went wrong'}</p>
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" asChild>
+            <Link href="/student/cbt/courses">Back to subjects</Link>
           </Button>
-          <div className="text-center py-12 text-gray-500">
-            <p>Unable to load practice configuration</p>
-          </div>
+          {error?.needsSubscription && (
+            <Button asChild>
+              <Link href="/student/cbt/bundles">View plans</Link>
+            </Button>
+          )}
         </div>
       </div>
     );
   }
 
-  const maxQuestions = config.totalQuestions;
-  const totalTime = formData.questionCount * formData.timePerQuestion;
+  const presets: Array<{ id: PresetId; title: string; detail: string; icon: React.ReactNode }> = [
+    { id: 'quick', title: 'Quick drill', detail: `${Math.min(10, config.totalQuestions)} questions · instant answers`, icon: <Zap className="h-5 w-5" /> },
+    { id: 'standard', title: 'Timed practice', detail: `${Math.min(20, config.totalQuestions)} questions · 20 min`, icon: <Timer className="h-5 w-5" /> },
+    {
+      id: 'jamb',
+      title: 'JAMB simulation',
+      detail: `${Math.min(jambCount, config.totalQuestions)} questions · ${Math.ceil(Math.min(jambCount, config.totalQuestions) * 0.75)} min`,
+      icon: <GraduationCap className="h-5 w-5" />,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-6">
-          <Button asChild variant="ghost" className="mb-4">
-            <Link href="/student/cbt/courses">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Courses
-            </Link>
-          </Button>
-          <h1 className="text-3xl font-bold text-gray-900">Configure Your Practice Session</h1>
-          <p className="text-gray-600 mt-2">{config.courseTitle}</p>
-        </div>
-
-        {/* Available Questions Info */}
-        <Card className="mb-6 bg-blue-50 border-blue-200">
-          <CardContent className="pt-6">
-            <div>
-              <p className="text-sm text-gray-600">Available Questions in Course</p>
-              <p className="text-2xl font-bold text-blue-600">{config.totalQuestions}</p>
-              <div className="mt-2 flex gap-2 text-xs">
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">Easy: {config.questionsByDifficulty.easy}</span>
-                <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">Medium: {config.questionsByDifficulty.medium}</span>
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">Hard: {config.questionsByDifficulty.hard}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Configuration Form */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Session Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Number of Questions */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Label className="text-base font-medium">Number of Questions</Label>
-                <span className="text-xs text-gray-500">({maxQuestions} available)</span>
-              </div>
-              <div className="flex gap-3 items-center">
-                <Input
-                  type="range"
-                  min="1"
-                  max={maxQuestions}
-                  value={formData.questionCount}
-                  onChange={(e) => setFormData({ ...formData, questionCount: parseInt(e.target.value) })}
-                  className="flex-1"
-                />
-                <Input
-                  type="number"
-                  min="1"
-                  max={maxQuestions}
-                  value={formData.questionCount}
-                  onChange={(e) => {
-                    const val = Math.min(maxQuestions, Math.max(1, parseInt(e.target.value) || 1));
-                    setFormData({ ...formData, questionCount: val });
-                  }}
-                  className="w-20 text-center"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                You will answer {formData.questionCount} question{formData.questionCount !== 1 ? 's' : ''}
-              </p>
-            </div>
-
-            {/* Difficulty Filter */}
-            <div>
-              <Label className="text-base font-medium mb-3 block">Difficulty Level (Optional)</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setFormData({ ...formData, difficulty: 'all' })}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    formData.difficulty === 'all'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="font-medium text-gray-900">All Levels</div>
-                  <p className="text-xs text-gray-600 mt-1">Mix of all difficulties</p>
-                </button>
-                <button
-                  onClick={() => setFormData({ ...formData, difficulty: 'easy' })}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    formData.difficulty === 'easy'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  disabled={config.questionsByDifficulty.easy === 0}
-                >
-                  <div className="font-medium text-gray-900">Easy</div>
-                  <p className="text-xs text-gray-600 mt-1">{config.questionsByDifficulty.easy} questions</p>
-                </button>
-                <button
-                  onClick={() => setFormData({ ...formData, difficulty: 'medium' })}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    formData.difficulty === 'medium'
-                      ? 'border-yellow-500 bg-yellow-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  disabled={config.questionsByDifficulty.medium === 0}
-                >
-                  <div className="font-medium text-gray-900">Medium</div>
-                  <p className="text-xs text-gray-600 mt-1">{config.questionsByDifficulty.medium} questions</p>
-                </button>
-                <button
-                  onClick={() => setFormData({ ...formData, difficulty: 'hard' })}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    formData.difficulty === 'hard'
-                      ? 'border-red-500 bg-red-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  disabled={config.questionsByDifficulty.hard === 0}
-                >
-                  <div className="font-medium text-gray-900">Hard</div>
-                  <p className="text-xs text-gray-600 mt-1">{config.questionsByDifficulty.hard} questions</p>
-                </button>
-              </div>
-            </div>
-
-            {/* Time Per Question */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Label className="text-base font-medium">Time Per Question (seconds)</Label>
-                <div className="group relative">
-                  <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" />
-                  <div className="absolute bottom-full mb-2 left-0 hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 w-48 z-10">
-                    This helps you manage your time during the practice session
-                  </div>
-                </div>
-              </div>
-              <Input
-                type="number"
-                min="30"
-                max="300"
-                step="15"
-                value={formData.timePerQuestion}
-                onChange={(e) => setFormData({ ...formData, timePerQuestion: Math.max(30, parseInt(e.target.value) || 60) })}
-                className="max-w-xs"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Estimated total time: <strong>{Math.floor(totalTime / 60)} min {totalTime % 60} sec</strong>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Summary Card */}
-        <Card className="mb-6 bg-gray-50 border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg">Session Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Questions to answer:</span>
-                <span className="font-medium text-gray-900">{formData.questionCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Difficulty level:</span>
-                <span className="font-medium text-gray-900 capitalize">{formData.difficulty}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Time per question:</span>
-                <span className="font-medium text-gray-900">{formData.timePerQuestion}s</span>
-              </div>
-              <div className="border-t pt-2 flex justify-between">
-                <span className="text-gray-600 font-medium">Estimated total time:</span>
-                <span className="font-bold text-blue-600">{Math.floor(totalTime / 60)}m {totalTime % 60}s</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <Button asChild variant="outline" className="flex-1">
-            <Link href="/student/cbt/courses">Cancel</Link>
-          </Button>
-          <Button
-            onClick={handleStartPractice}
-            disabled={starting}
-            className="flex-1"
-          >
-            {starting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Starting Session...
-              </>
-            ) : (
-              `Start Practice (${formData.questionCount} Questions)`
+    <div className="min-h-screen bg-slate-50 pb-32">
+      {/* hero */}
+      <div className="bg-gradient-to-br from-[#1F2A5A] via-[#26357a] to-[#2563EB] text-white">
+        <div className="mx-auto max-w-4xl px-4 pb-10 pt-6">
+          <Link href="/student/cbt/courses" className="mb-5 inline-flex items-center gap-1.5 text-sm text-blue-200 hover:text-white">
+            <ArrowLeft className="h-4 w-4" /> All subjects
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold sm:text-4xl">{config.courseTitle}</h1>
+            {config.accessMode === 'free' && (
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-300/40">
+                <Gift className="h-3.5 w-3.5" /> Free practice
+              </span>
             )}
+          </div>
+          <p className="mt-2 text-blue-100">
+            {config.courseCode} · {config.totalQuestions.toLocaleString()} questions in the bank
+            {config.sessionsRemaining !== null && ` · ${config.sessionsRemaining} sessions left on your plan`}
+          </p>
+        </div>
+      </div>
+
+      <div className="mx-auto -mt-6 max-w-4xl space-y-5 px-4">
+        {/* resume */}
+        {config.activeSession && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div>
+              <p className="font-semibold text-amber-900">You have an unfinished test</p>
+              <p className="text-sm text-amber-800">
+                {config.activeSession.answered}/{config.activeSession.totalQuestions} answered
+                {config.activeSession.deadlineAt && ' · the timer is still running'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleDiscard}>
+                Discard
+              </Button>
+              <Button size="sm" asChild className="bg-amber-500 text-white hover:bg-amber-600">
+                <Link href={`/student/cbt/practice/session/${config.activeSession.id}`}>
+                  <RotateCcw className="mr-1.5 h-4 w-4" /> Resume
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* presets */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 font-semibold text-slate-900">Pick a session</h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {presets.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => applyPreset(p.id)}
+                className={cn(
+                  'rounded-xl border-2 p-4 text-left transition',
+                  preset === p.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'
+                )}
+              >
+                <span className={cn('mb-2 flex h-9 w-9 items-center justify-center rounded-lg', preset === p.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600')}>
+                  {p.icon}
+                </span>
+                <p className="font-semibold text-slate-900">{p.title}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{p.detail}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* mode */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 font-semibold text-slate-900">How do you want to practise?</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([
+              { id: 'exam', title: 'Exam mode', detail: 'Answers and explanations appear after you submit — just like the real CBT.', icon: <Clock className="h-5 w-5" /> },
+              { id: 'study', title: 'Study mode', detail: 'See if you were right, with the explanation, straight after each question.', icon: <BookOpenCheck className="h-5 w-5" /> },
+            ] as const).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setMode(m.id);
+                  touch();
+                }}
+                className={cn(
+                  'flex items-start gap-3 rounded-xl border-2 p-4 text-left transition',
+                  mode === m.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'
+                )}
+              >
+                <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', mode === m.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600')}>
+                  {m.icon}
+                </span>
+                <span>
+                  <span className="block font-semibold text-slate-900">{m.title}</span>
+                  <span className="text-xs text-slate-500">{m.detail}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* customise */}
+        <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold text-slate-900">Customise</h2>
+
+          <div>
+            <div className="mb-2 flex items-baseline justify-between">
+              <label htmlFor="count" className="text-sm font-medium text-slate-700">Number of questions</label>
+              <span className="text-2xl font-bold text-blue-700">{effectiveCount}</span>
+            </div>
+            <input
+              id="count"
+              type="range"
+              min={1}
+              max={Math.max(1, Math.min(available, 100))}
+              value={Math.min(count, Math.max(1, Math.min(available, 100)))}
+              onChange={(e) => {
+                setCount(Number(e.target.value));
+                touch();
+              }}
+              className="w-full accent-blue-600"
+            />
+            <p className="mt-1 text-xs text-slate-500">{available} questions match your filters</p>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">Difficulty</p>
+            <div className="flex flex-wrap gap-2">
+              {DIFFICULTIES.map((d) => {
+                const n = d.id === 'all' ? config.totalQuestions : config.questionsByDifficulty[d.id];
+                const disabled = n === 0;
+                return (
+                  <button
+                    key={d.id}
+                    disabled={disabled}
+                    onClick={() => {
+                      setDifficulty(d.id);
+                      touch();
+                    }}
+                    className={cn(
+                      'rounded-full border px-4 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40',
+                      difficulty === d.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-700 hover:border-blue-300'
+                    )}
+                  >
+                    {d.label} <span className="opacity-70">({n})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">Time limit</p>
+            <div className="flex flex-wrap gap-2">
+              {TIME_OPTIONS.map((t) => (
+                <button
+                  key={t.label}
+                  onClick={() => {
+                    setTimeLimit(t.value);
+                    touch();
+                  }}
+                  className={cn(
+                    'rounded-full border px-4 py-1.5 text-sm font-medium transition',
+                    timeLimit === t.value ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-700 hover:border-blue-300'
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+              {timeLimit !== null && !TIME_OPTIONS.some((t) => t.value === timeLimit) && (
+                <span className="rounded-full border border-blue-600 bg-blue-600 px-4 py-1.5 text-sm font-medium text-white">{timeLimit} min</span>
+              )}
+            </div>
+          </div>
+
+          {config.topics.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-700">Topics {topicIds.length === 0 && <span className="font-normal text-slate-400">(all)</span>}</p>
+                {topicIds.length > 0 && (
+                  <button onClick={() => setTopicIds([])} className="text-xs font-medium text-blue-600 hover:underline">
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {config.topics.map((t) => {
+                  const on = topicIds.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setTopicIds((prev) => (on ? prev.filter((id) => id !== t.id) : [...prev, t.id]));
+                        touch();
+                      }}
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-sm transition',
+                        on ? 'border-blue-600 bg-blue-50 font-medium text-blue-700' : 'border-slate-200 text-slate-600 hover:border-blue-300'
+                      )}
+                    >
+                      {t.name} <span className="opacity-60">({t.count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* recent */}
+        {config.recentSessions.length > 0 && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-semibold text-slate-900">Your recent scores</h2>
+            <ul className="divide-y divide-slate-100">
+              {config.recentSessions.map((s) => (
+                <li key={s.id}>
+                  <Link href={`/student/cbt/practice/results/${s.id}`} className="flex items-center justify-between py-2.5 text-sm hover:text-blue-700">
+                    <span className="text-slate-500">
+                      {s.completedAt ? new Date(s.completedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—'} · {s.totalQuestions} questions
+                    </span>
+                    <span className={cn('font-bold', s.scorePercentage >= 50 ? 'text-emerald-600' : 'text-rose-600')}>{Math.round(s.scorePercentage)}%</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      {/* sticky start bar */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3">
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">{effectiveCount} questions</span> · {timeLimit ? `${timeLimit} min` : 'no timer'} ·{' '}
+            {mode === 'study' ? 'study' : 'exam'} mode
+          </p>
+          <Button size="lg" onClick={handleStart} disabled={starting || available === 0} className="bg-[#1F2A5A] px-8 hover:bg-[#2a3a7a]">
+            {starting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Play className="mr-2 h-5 w-5" />}
+            Start
           </Button>
         </div>
-
-        {/* Tips */}
-        <Card className="mt-8 bg-green-50 border-green-200">
-          <CardHeader>
-            <CardTitle className="text-base text-green-900">💡 Tips for Better Performance</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-green-800 space-y-2">
-            <p>• Start with medium difficulty questions to build confidence</p>
-            <p>• Set a time limit that allows you to think through questions</p>
-            <p>• Practice regularly to improve your score over time</p>
-            <p>• Review the solutions after each practice session</p>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import {
   WelcomeEmail,
   PartnerCredentialsEmail,
 } from '@/lib/email-templates'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 /**
  * Send welcome email to new user
@@ -27,7 +28,7 @@ export async function sendWelcomeEmail(
     console.log(`📧 Preparing welcome email for: ${email}, role: ${role}`)
     
     // Use environment variable for app URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+    const baseUrl = getSiteUrl()
     const dashboardUrl = role === 'partner' 
       ? `${baseUrl}/auth/login`
       : `${baseUrl}/auth/login`
@@ -77,7 +78,7 @@ export async function sendPartnerCredentialsEmail(
   partnerCode: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+    const baseUrl = getSiteUrl()
     const loginUrl = `${baseUrl}/auth/login`
 
     const html = (await render(
@@ -155,7 +156,7 @@ export async function sendGradingCompleteEmail(
 ) {
   try {
     const percentage = Math.round((score / maxScore) * 100)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+    const baseUrl = getSiteUrl()
     const dashboardUrl = `${baseUrl}/student/dashboard`
 
     const html = (await render(
@@ -199,7 +200,7 @@ export async function sendTestInvitationEmail(
   testDate?: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+    const baseUrl = getSiteUrl()
     const accessUrl = `${baseUrl}/tests/${testCode}`
 
     const html = (await render(
@@ -240,7 +241,7 @@ export async function sendEnrollmentConfirmationEmail(
   enrollmentDate: string
 ) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+    const baseUrl = getSiteUrl()
     const dashboardUrl = `${baseUrl}/student/courses`
 
     const html = (await render(
@@ -277,7 +278,7 @@ export async function sendPasswordResetEmail(
   resetToken: string
 ) {
   try {
-    const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/update-password?token=${resetToken}`
+    const resetLink = `${getSiteUrl()}/auth/update-password?token=${resetToken}`
 
     console.log(`📧 Preparing password reset email for: ${email}`)
     console.log(`📧 Reset link: ${resetLink}`)

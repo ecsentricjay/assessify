@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Copy, Check, TrendingUp, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-NG', {
@@ -37,7 +38,7 @@ export function PromoCodeCardClient({ code, stats }: PromoCodeCardClientProps) {
 
   function copyLink() {
     if (code && typeof window !== 'undefined') {
-      const link = `${window.location.origin}/student/cbt/bundles?ref=${code}`
+      const link = `${getSiteUrl()}/student/cbt/bundles?ref=${code}`
       navigator.clipboard.writeText(link)
       toast.success('Referral link copied!')
     }

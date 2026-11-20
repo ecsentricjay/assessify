@@ -29,18 +29,38 @@ export async function signUp(formData: {
   lastName: string
   role: 'student' | 'lecturer'
   title?: string
-  institutionId: string
+  institutionId?: string
   matricNumber?: string
   staffId?: string
-  department: string
-  faculty: string
+  department?: string
+  faculty?: string
   level?: number
   phone: string
   referralCode?: string
   institutionCode?: string // optional — for self-registration
+  // Jambite sub-profile (students preparing for JAMB)
+  studentType?: 'university' | 'jambite'
+  jambInstitutions?: string[] // desired institutions, 1–2
+  jambCourses?: string[] // desired courses of study, 1–2
 }) {
   const supabase = await createClient()
   const adminClient = createServiceClient()
+
+  const isJambite = formData.role === 'student' && formData.studentType === 'jambite'
+  const clean = (list?: string[]) =>
+    Array.from(new Set((list ?? []).map((v) => v.trim().replace(/\s+/g, ' ')).filter(Boolean))).slice(0, 2)
+  const jambInstitutions = clean(formData.jambInstitutions)
+  const jambCourses = clean(formData.jambCourses)
+
+  if (isJambite) {
+    if (jambInstitutions.length < 1) return { error: 'Choose at least one institution you want to attend' }
+    if (jambCourses.length < 1) return { error: 'Enter at least one course you want to study' }
+    if ([...jambInstitutions, ...jambCourses].some((v) => v.length > 120)) {
+      return { error: 'Institution and course names must be under 120 characters' }
+    }
+  } else if (!formData.institutionId || !formData.department || !formData.faculty) {
+    return { error: 'Institution, faculty and department are required' }
+  }
 
   // Validate referral code if provided (lecturers only)
   let partnerId: string | null = null
@@ -90,16 +110,21 @@ export async function signUp(formData: {
     .from('profiles')
     .upsert({
       id: authData.user.id,
-      institution_id: formData.institutionId,
+      institution_id: isJambite ? null : formData.institutionId,
       first_name: formData.firstName,
       last_name: formData.lastName,
       role: formData.role,
       title: formData.title,
-      matric_number: formData.matricNumber,
+      matric_number: isJambite ? null : formData.matricNumber,
       staff_id: formData.staffId,
-      department: formData.department,
-      faculty: formData.faculty,
-      level: formData.level,
+      department: isJambite ? null : formData.department,
+      faculty: isJambite ? null : formData.faculty,
+      level: isJambite ? null : formData.level,
+      student_type: isJambite ? 'jambite' : 'university',
+      jamb_institution_1: isJambite ? jambInstitutions[0] ?? null : null,
+      jamb_institution_2: isJambite ? jambInstitutions[1] ?? null : null,
+      jamb_course_1: isJambite ? jambCourses[0] ?? null : null,
+      jamb_course_2: isJambite ? jambCourses[1] ?? null : null,
       phone: formData.phone,
       email_verified: false,
       referred_by_partner: partnerId,
@@ -114,7 +139,7 @@ export async function signUp(formData: {
   }
 
   // Link to institution if self-register code provided
-  if (formData.institutionCode) {
+  if (formData.institutionCode && !isJambite) {
     const { validateInstitutionCode } = await import('./institution.actions')
     const codeResult = await validateInstitutionCode(formData.institutionCode)
     
@@ -553,17 +578,46 @@ export async function updateProfile(formData: {
   lastName: string
   title?: string
   phone: string
-  department: string
-  faculty: string
+  department?: string
+  faculty?: string
   level?: number
   matricNumber?: string
   staffId?: string
+  jambInstitutions?: string[]
+  jambCourses?: string[]
 }) {
   const supabase = await createClient()
   const user = await getCurrentUser()
 
   if (!user) {
     return { error: 'Not authenticated' }
+  }
+
+  // Jambites only edit their name, phone and JAMB choices
+  if (user.profile?.student_type === 'jambite') {
+    const clean = (list?: string[]) =>
+      Array.from(new Set((list ?? []).map((v) => v.trim().replace(/\s+/g, ' ')).filter(Boolean))).slice(0, 2)
+    const insts = clean(formData.jambInstitutions)
+    const courses = clean(formData.jambCourses)
+    if (insts.length < 1) return { error: 'Choose at least one institution' }
+    if (courses.length < 1) return { error: 'Enter at least one course' }
+
+    const { error: jError } = await supabase
+      .from('profiles')
+      .update({
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        phone: formData.phone,
+        jamb_institution_1: insts[0],
+        jamb_institution_2: insts[1] ?? null,
+        jamb_course_1: courses[0],
+        jamb_course_2: courses[1] ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+    if (jError) return { error: jError.message }
+    revalidatePath('/', 'layout')
+    return { success: true, message: 'Profile updated successfully!' }
   }
 
   const { error } = await supabase
@@ -588,6 +642,58 @@ export async function updateProfile(formData: {
 
   revalidatePath('/', 'layout')
   return { success: true, message: 'Profile updated successfully!' }
+}
+
+/** A Jambite who has gained admission becomes a regular university student. Keeps wallet, CBT history and Study Aid credits. */
+export async function upgradeToUniversityStudent(formData: {
+  institutionId: string
+  matricNumber: string
+  level: number
+  faculty: string
+  department: string
+}) {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Not authenticated' }
+  if (user.profile?.role !== 'student' || user.profile?.student_type !== 'jambite') {
+    return { error: 'Only Jambite accounts can be upgraded' }
+  }
+
+  const institutionId = formData.institutionId?.trim()
+  const matric = formData.matricNumber?.trim()
+  const faculty = formData.faculty?.trim()
+  const department = formData.department?.trim()
+  if (!institutionId || !matric || !faculty || !department) {
+    return { error: 'Institution, matric number, faculty and department are required' }
+  }
+  if (![100, 200, 300, 400, 500].includes(formData.level)) {
+    return { error: 'Choose a valid level' }
+  }
+
+  // Service client: the profile is scoped to the signed-in user's own id below
+  const adminClient = createServiceClient()
+  const { data: inst } = await adminClient.from('institutions').select('id').eq('id', institutionId).maybeSingle()
+  if (!inst) return { error: 'Selected institution was not found' }
+
+  const { error } = await adminClient
+    .from('profiles')
+    .update({
+      student_type: 'university',
+      institution_id: institutionId,
+      matric_number: matric,
+      level: formData.level,
+      faculty,
+      department,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+    .eq('student_type', 'jambite')
+
+  if (error) {
+    return { error: error.code === '23505' ? 'That matric number is already registered' : error.message }
+  }
+
+  revalidatePath('/', 'layout')
+  return { success: true, message: 'Welcome aboard! Your account is now a full student account.' }
 }
 
 export async function changePassword(newPassword: string) {

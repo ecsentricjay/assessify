@@ -14,6 +14,7 @@ import { getTestStatistics } from '@/lib/actions/test.actions'
 import CopyButton from '@/components/assignment/copy-button'
 import type { TestWithDetails, QuestionWithOptions, TestStatistics } from '@/lib/types/test.types'
 import { formatDistanceToNow } from 'date-fns'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 export default function TestDetailsPage() {
   const params = useParams()
@@ -158,7 +159,7 @@ export default function TestDetailsPage() {
     )
   }
 
-  const shareableLink = test.access_code ? `${window.location.origin}/tests/${test.access_code}` : ''
+  const shareableLink = test.access_code ? `${getSiteUrl()}/tests/${test.access_code}` : ''
   const isExpired = new Date(test.end_time) < new Date()
   const hasStarted = new Date(test.start_time) <= new Date()
 

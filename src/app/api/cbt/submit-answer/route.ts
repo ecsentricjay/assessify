@@ -1,86 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/actions/auth.actions';
+import { getAuthUserId } from '@/lib/services/cbt-access.service';
+import { isPastDeadline } from '@/lib/services/cbt-session.service';
 
+/**
+ * POST { sessionId, questionId, selectedAnswer }
+ * Saves (or changes) one answer. Exam mode returns just { success }.
+ * Study mode locks the answer on first submit and returns instant feedback.
+ */
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const userId = await getAuthUserId();
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { sessionId, questionId, selectedAnswer } = body;
-
-    if (!sessionId || !questionId || !selectedAnswer) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    const { sessionId, questionId, selectedAnswer } = await request.json();
+    if (!sessionId || !questionId || !['A', 'B', 'C', 'D'].includes(selectedAnswer)) {
+      return NextResponse.json({ success: false, error: 'Missing or invalid fields' }, { status: 400 });
     }
 
     const supabase = await createClient();
 
-    // Verify session belongs to user
     const { data: session } = await supabase
       .from('cbt_practice_sessions')
-      .select('id, student_id')
+      .select('id, status, mode, started_at, created_at, time_limit_minutes')
       .eq('id', sessionId)
-      .eq('student_id', user.id)
-      .eq('status', 'in_progress')
-      .single();
+      .eq('student_id', userId)
+      .maybeSingle();
 
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 403 });
+    if (!session || session.status !== 'in_progress') {
+      return NextResponse.json({ success: false, error: 'This session is no longer active' }, { status: 409 });
+    }
+    if (isPastDeadline(session)) {
+      return NextResponse.json({ success: false, error: 'Time is up', expired: true }, { status: 409 });
     }
 
-    // Get correct answer
-    const { data: question } = await supabase
-      .from('cbt_session_questions')
-      .select('correct_answer')
-      .eq('session_id', sessionId)
-      .eq('question_id', questionId)
-      .single();
+    const [{ data: question }, { data: existing }] = await Promise.all([
+      supabase
+        .from('cbt_session_questions')
+        .select('correct_answer, solution, solution_image_url')
+        .eq('session_id', sessionId)
+        .eq('question_id', questionId)
+        .maybeSingle(),
+      supabase
+        .from('cbt_session_answers')
+        .select('selected_answer, is_correct')
+        .eq('session_id', sessionId)
+        .eq('question_id', questionId)
+        .maybeSingle(),
+    ]);
 
     if (!question) {
-      return NextResponse.json({ success: false, error: 'Question not found' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Question not found in this session' }, { status: 404 });
+    }
+
+    const isStudy = session.mode === 'study';
+    const feedback = (selected: string, isCorrect: boolean) => ({
+      selectedAnswer: selected,
+      isCorrect,
+      correctAnswer: question.correct_answer,
+      solution: question.solution ?? null,
+      solutionImageUrl: question.solution_image_url ?? null,
+    });
+
+    // Study mode: first answer is final
+    if (isStudy && existing) {
+      return NextResponse.json({ success: true, locked: true, ...feedback(existing.selected_answer, !!existing.is_correct) });
     }
 
     const isCorrect = selectedAnswer === question.correct_answer;
-
-    // Save answer (upsert in case they change their answer)
-    const { error: upsertError } = await supabase
-      .from('cbt_session_answers')
-      .upsert({
+    const { error } = await supabase.from('cbt_session_answers').upsert(
+      {
         session_id: sessionId,
         question_id: questionId,
         selected_answer: selectedAnswer,
         is_correct: isCorrect,
-      });
+        answered_at: new Date().toISOString(),
+      },
+      { onConflict: 'session_id,question_id' }
+    );
 
-    if (upsertError) {
-      console.error('[submit-answer] Upsert error:', upsertError);
+    if (error) {
+      console.error('[submit-answer]', error.message);
       return NextResponse.json({ success: false, error: 'Failed to save answer' }, { status: 500 });
     }
 
-    // Update session progress
-    const { data: answers } = await supabase
-      .from('cbt_session_answers')
-      .select('is_correct')
-      .eq('session_id', sessionId);
-
-    const correctCount = (answers || []).filter(a => a.is_correct).length;
-    const totalAnswered = answers?.length || 0;
-
-    await supabase
-      .from('cbt_practice_sessions')
-      .update({
-        answered_questions: totalAnswered,
-        correct_answers: correctCount,
-        wrong_answers: totalAnswered - correctCount,
-      })
-      .eq('id', sessionId);
-
-    return NextResponse.json({ success: true, isCorrect });
-  } catch (error: any) {
-    console.error('[submit-answer] Error:', error);
+    return NextResponse.json(isStudy ? { success: true, ...feedback(selectedAnswer, isCorrect) } : { success: true });
+  } catch (error) {
+    console.error('[submit-answer]', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }

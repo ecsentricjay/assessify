@@ -1,223 +1,144 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, BookOpen, Plus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { getMyActiveSubscriptions } from '@/lib/actions/student-cbt-purchase.actions';
-import { toast } from 'sonner';
+import { ArrowRight, BookOpen, Gift, Loader2, Lock, Search, Trophy } from 'lucide-react';
 
-interface ActiveSubscription {
-  id: string;
-  course_id: string;
-  course_code: string;
-  course_title: string;
-  bundle_name: string;
-  bundle_id: string;
-  sessions_completed: number;
-  average_score: number;
-  expiry_date: string;
-  days_remaining: number;
-  is_expired: boolean;
-}
+import { Input } from '@/components/ui/input';
+import { getPracticeCourses } from '@/lib/actions/student-cbt-practice.actions';
+import type { PracticeCourseCard } from '@/lib/types/cbt.types';
+import { cn } from '@/lib/utils';
 
-export default function CoursesPage() {
-  const [subscriptions, setSubscriptions] = useState<ActiveSubscription[]>([]);
+// Rotating accents so subjects are easy to tell apart at a glance
+const ACCENTS = [
+  'from-blue-600 to-indigo-700',
+  'from-emerald-500 to-teal-700',
+  'from-amber-500 to-orange-600',
+  'from-rose-500 to-pink-700',
+  'from-violet-500 to-purple-700',
+  'from-cyan-500 to-sky-700',
+];
+
+export default function CbtCoursesPage() {
+  const [courses, setCourses] = useState<PracticeCourseCard[]>([]);
+  const [subscriptionRequired, setSubscriptionRequired] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    loadSubscriptions();
+    (async () => {
+      const res = await getPracticeCourses();
+      if (res.success) {
+        setCourses(res.courses);
+        setSubscriptionRequired(res.subscriptionRequired);
+      } else {
+        setError(res.error ?? 'Could not load subjects');
+      }
+      setLoading(false);
+    })();
   }, []);
 
-  async function loadSubscriptions() {
-    try {
-      setLoading(true);
-      const res = await getMyActiveSubscriptions();
-      if (res.success && res.subscriptions) {
-        setSubscriptions(res.subscriptions as ActiveSubscription[]);
-      }
-    } catch (error) {
-      console.error('[loadSubscriptions]', error);
-      toast.error('Failed to load courses');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const getDaysRemaining = (expiryDate: string) => {
-    const days = Math.ceil(
-      (new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.max(0, days);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return courses;
+    return courses.filter((c) => c.title.toLowerCase().includes(q) || c.code.toLowerCase().includes(q));
+  }, [courses, query]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">My Courses</h1>
-            <p className="text-gray-600 mt-2">
-              Start practicing or continue where you left off
-            </p>
+    <div className="min-h-screen bg-slate-50 pb-16">
+      <div className="bg-gradient-to-br from-[#1F2A5A] via-[#26357a] to-[#2563EB] text-white">
+        <div className="mx-auto max-w-6xl px-4 pb-14 pt-10">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold sm:text-4xl">Choose a subject</h1>
+            {!subscriptionRequired && !loading && (
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-300/40">
+                <Gift className="h-3.5 w-3.5" /> All practice is free
+              </span>
+            )}
           </div>
-          <Button asChild>
-            <Link href="/student/cbt/bundles">
-              <Plus className="w-4 h-4 mr-2" />
-              Browse Bundles
-            </Link>
-          </Button>
+          <p className="mt-2 max-w-xl text-blue-100">Practise past-question style CBT, track your scores, and find the topics that need work.</p>
+
+          <div className="relative mt-6 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search subjects…"
+              className="h-11 border-0 bg-white pl-10 text-slate-900 shadow-lg"
+            />
+          </div>
         </div>
+      </div>
 
-        {/* Active Subscriptions */}
-        {subscriptions.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">You don't have any active subscriptions yet.</p>
-              <Button asChild>
-                <Link href="/student/cbt/bundles">Browse Practice Bundles</Link>
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="mx-auto -mt-6 max-w-6xl px-4">
+        {loading ? (
+          <div className="flex justify-center py-24">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          </div>
+        ) : error ? (
+          <p className="rounded-2xl bg-white p-10 text-center text-rose-600 shadow-sm">{error}</p>
+        ) : filtered.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
+            {courses.length === 0 ? 'No subjects have been published yet.' : 'No subject matches your search.'}
+          </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {subscriptions.map((sub) => {
-              const daysLeft = sub.days_remaining;
-              const isNearingExpiry = daysLeft <= 7;
-              const isExpired = sub.is_expired;
-
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((course, i) => {
+              const href = course.hasAccess ? `/student/cbt/courses/${course.id}/practice` : '/student/cbt/bundles';
               return (
-                <Card
-                  key={sub.id}
-                  className={`flex flex-col hover:shadow-lg transition-all ${
-                    isExpired ? 'opacity-60' : ''
-                  }`}
+                <Link
+                  key={course.id}
+                  href={href}
+                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                 >
-                  {/* Status Bar */}
-                  <div
-                    className={`h-2 ${
-                      isExpired ? 'bg-gray-400' : isNearingExpiry ? 'bg-orange-500' : 'bg-green-500'
-                    }`}
-                  />
-
-                  {/* Card Content */}
-                  <CardHeader>
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-500 font-medium">{sub.course_code}</div>
-                      <CardTitle className="text-lg">{sub.course_title}</CardTitle>
-                      <p className="text-xs text-gray-600">{sub.bundle_name}</p>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="flex-1 space-y-4">
-                    {/* Practice Sessions Completed */}
+                  <div className={cn('relative flex h-24 items-end bg-gradient-to-br p-4 text-white', ACCENTS[i % ACCENTS.length])}>
+                    <BookOpen className="absolute right-4 top-4 h-12 w-12 opacity-20" />
                     <div>
-                      <span className="text-sm font-medium text-gray-700">Practice Sessions</span>
-                      <p className="text-2xl font-bold text-blue-600 mt-1">{sub.sessions_completed}</p>
-                      <p className="text-xs text-gray-500">completed</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider opacity-80">{course.code}</p>
+                      <h2 className="text-xl font-bold leading-tight">{course.title}</h2>
+                    </div>
+                    {!course.hasAccess && (
+                      <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/30 px-2.5 py-1 text-xs font-semibold">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-4">
+                    {course.description && <p className="mb-3 line-clamp-2 text-sm text-slate-600">{course.description}</p>}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">{course.questionCount.toLocaleString()} questions</span>
+                      {course.bestScore !== null && (
+                        <span className="flex items-center gap-1 font-semibold text-amber-600">
+                          <Trophy className="h-3.5 w-3.5" /> Best {Math.round(course.bestScore)}%
+                        </span>
+                      )}
                     </div>
 
-                    {/* Average Score */}
-                    {sub.sessions_completed > 0 && (
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">Average Score</span>
-                        <p className="text-2xl font-bold text-green-600 mt-1">{sub.average_score}%</p>
+                    {course.sessionsCompleted > 0 && (
+                      <div className="mt-3">
+                        <div className="mb-1 flex justify-between text-xs text-slate-500">
+                          <span>{course.sessionsCompleted} sessions</span>
+                          <span>Avg {course.averageScore}%</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-blue-600" style={{ width: `${course.averageScore ?? 0}%` }} />
+                        </div>
                       </div>
                     )}
 
-                    {/* Expiry Info */}
-                    <div
-                      className={`p-3 rounded-lg text-sm ${
-                        isExpired
-                          ? 'bg-gray-100 text-gray-700'
-                          : isNearingExpiry
-                            ? 'bg-orange-50 text-orange-800'
-                            : 'bg-green-50 text-green-800'
-                      }`}
-                    >
-                      {isExpired ? (
-                        <p>
-                          <strong>Expired</strong> on{' '}
-                          {new Date(sub.expiry_date).toLocaleDateString()}
-                        </p>
-                      ) : (
-                        <p>
-                          <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining</strong>{' '}
-                          (expires {new Date(sub.expiry_date).toLocaleDateString()})
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-
-                  {/* Action Buttons */}
-                  <div className="p-4 border-t">
-                    {isExpired ? (
-                      <Button asChild variant="outline" className="w-full" disabled>
-                        Subscription Expired
-                      </Button>
-                    ) : (
-                      <Button asChild className="w-full">
-                        <Link href={`/student/cbt/courses/${sub.course_id}/practice`}>
-                          Start Practice
-                        </Link>
-                      </Button>
+                    <p className="mt-4 flex items-center gap-1 text-sm font-semibold text-blue-700">
+                      {course.hasAccess ? 'Start practising' : 'Unlock with a plan'}
+                      <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                    </p>
+                    {course.subscription && subscriptionRequired && (
+                      <p className="mt-1 text-xs text-slate-400">{course.subscription.daysRemaining} days of access left</p>
                     )}
                   </div>
-                </Card>
+                </Link>
               );
             })}
-          </div>
-        )}
-
-        {/* Additional Info */}
-        {subscriptions.length > 0 && (
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">How It Works</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-gray-600">
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Select a course from your subscriptions</li>
-                  <li>Click "Start Practice" to begin a session</li>
-                  <li>Answer questions and submit your responses</li>
-                  <li>Review your results and improve</li>
-                </ol>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Pro Tips</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-gray-600 space-y-1">
-                <p>✓ Take multiple sessions to improve</p>
-                <p>✓ Focus on areas with low scores</p>
-                <p>✓ Track your progress over time</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Need More Courses?</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm">
-                <Button asChild className="w-full">
-                  <Link href="/student/cbt/bundles">Explore More Bundles</Link>
-                </Button>
-              </CardContent>
-            </Card>
           </div>
         )}
       </div>

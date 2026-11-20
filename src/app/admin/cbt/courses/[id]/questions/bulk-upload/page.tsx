@@ -1,527 +1,509 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { bulkUploadQuestions, getCourseById, getTopicsByCourse } from '@/lib/actions/admin-cbt-courses.actions';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle, Download, Upload, ArrowLeft } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Download,
+  ImagePlus,
+  Loader2,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 
-interface Course {
-  id: string;
-  course_code: string;
-  course_title: string;
-  description: string;
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MathText } from '@/components/cbt/CbtContent';
+import { bulkUploadQuestions, getCourseById, getTopicsByCourse, type BulkQuestionInput } from '@/lib/actions/admin-cbt-courses.actions';
+import {
+  AI_CSV_PROMPT,
+  CSV_HEADERS,
+  buildCsvTemplate,
+  inspectImageCell,
+  parseQuestionCsv,
+  validateRow,
+  type ParsedQuestionRow,
+} from '@/lib/utils/cbt-csv';
+import { fileToDataUri } from '@/lib/utils/image-file';
+import { cn } from '@/lib/utils';
+
+const BATCH_MAX_ROWS = 10;
+const BATCH_MAX_CHARS = 3_500_000; // keeps each request comfortably below the 8MB server-action limit
+const PAGE_SIZE = 25;
+
+type Stage = 'idle' | 'preview' | 'importing' | 'done';
+
+function rowChars(r: ParsedQuestionRow) {
+  const i = r.images;
+  return r.questionText.length + (r.solution?.length ?? 0) + i.question.length + i.A.length + i.B.length + i.C.length + i.D.length + i.solution.length + 600;
 }
 
-interface ParsedQuestion {
-  topicName?: string;
-  questionText: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  correctAnswer: 'A' | 'B' | 'C' | 'D';
-  solution?: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  rowNumber: number;
-  errors: string[];
+function toInput(r: ParsedQuestionRow): BulkQuestionInput {
+  return {
+    rowNumber: r.rowNumber,
+    topicName: r.topicName,
+    questionText: r.questionText,
+    optionA: r.options.A,
+    optionB: r.options.B,
+    optionC: r.options.C,
+    optionD: r.options.D,
+    correctAnswer: r.correctAnswer as 'A' | 'B' | 'C' | 'D',
+    solution: r.solution,
+    difficulty: r.difficulty,
+    images: r.images,
+  };
 }
 
-const CSV_TEMPLATE = `Topic Name,Question Text,Option A,Option B,Option C,Option D,Correct Answer,Difficulty,Solution
-Physics,What is Newton's first law?,An object remains at rest,No object exists,Energy is conserved,Forces always balance,A,easy,An object at rest stays at rest unless acted upon
-Physics,What is the SI unit of force?,Newton,Joule,Watt,Pascal,A,medium,Force is measured in Newtons (N)
-Chemistry,What is the atomic number of Carbon?,6,8,12,4,A,easy,Carbon has 6 protons
-Chemistry,What is photosynthesis?,Respiration process,Plant process using sunlight,Decomposition of organic matter,Fermentation,B,hard,Photosynthesis converts light energy to chemical energy`;
+function download(filename: string, text: string) {
+  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function BulkUploadQuestionsPage() {
-  const router = useRouter();
   const params = useParams();
   const courseId = params.id as string;
 
-  const [course, setCourse] = useState<Course | null>(null);
-  const [topics, setTopics] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [csvContent, setCsvContent] = useState('');
-  const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
-  const [uploadResult, setUploadResult] = useState<
-    | { imported: number; failed: number; errors: string[] }
-    | { success: boolean; error: string }
-    | null
-  >(null);
+  const [courseTitle, setCourseTitle] = useState('');
+  const [existingTopics, setExistingTopics] = useState<string[]>([]);
+  const [stage, setStage] = useState<Stage>('idle');
+  const [fileName, setFileName] = useState('');
+  const [fatal, setFatal] = useState<string | null>(null);
+  const [rows, setRows] = useState<ParsedQuestionRow[]>([]);
+  const [page, setPage] = useState(0);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [summary, setSummary] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
+  const attachTarget = useRef<{ rowNumber: number; slot: 'question' | 'solution' } | null>(null);
 
   useEffect(() => {
-    loadCourseAndTopics();
+    getCourseById(courseId).then((res) => {
+      if (res.success && res.course) setCourseTitle((res.course as { course_title: string }).course_title);
+    });
+    getTopicsByCourse(courseId).then((res) => {
+      if (res.success && res.topics) setExistingTopics((res.topics as Array<{ name: string }>).map((t) => t.name.trim().replace(/\s+/g, ' ').toLowerCase()));
+    });
   }, [courseId]);
 
-  async function loadCourseAndTopics() {
-    try {
-      setLoading(true);
-      const [courseRes, topicsRes] = await Promise.all([
-        getCourseById(courseId),
-        getTopicsByCourse(courseId),
-      ]);
-
-      if (courseRes.success && courseRes.course) {
-        setCourse(courseRes.course as Course);
+  // Topics found in the CSV: how many questions each, and whether it will be newly created
+  const topicSummary = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+    let noTopic = 0;
+    rows.filter((r) => r.errors.length === 0).forEach((r) => {
+      const label = r.topicName?.trim().replace(/\s+/g, ' ');
+      if (!label) {
+        noTopic += 1;
+        return;
       }
+      const key = label.toLowerCase();
+      const cur = counts.get(key) ?? { label, count: 0 };
+      cur.count += 1;
+      counts.set(key, cur);
+    });
+    const topics = [...counts.entries()]
+      .map(([key, v]) => ({ ...v, isNew: !existingTopics.includes(key) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { topics, noTopic };
+  }, [rows, existingTopics]);
 
-      if (topicsRes.success && topicsRes.topics) {
-        setTopics(topicsRes.topics);
-      }
-    } catch (error) {
-      console.error('[loadCourseAndTopics]', error);
-      toast.error('Failed to load course data');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const valid = useMemo(() => rows.filter((r) => r.errors.length === 0), [rows]);
+  const invalid = rows.length - valid.length;
+  const withImages = useMemo(
+    () => rows.filter((r) => Object.values(r.images).some((v) => v.trim())).length,
+    [rows]
+  );
+  const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const pageCount = Math.ceil(rows.length / PAGE_SIZE);
 
-  function downloadTemplate() {
-    const element = document.createElement('a');
-    element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(CSV_TEMPLATE));
-    element.setAttribute('download', 'questions-template.csv');
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-
-    toast.success('Template downloaded successfully');
-  }
-
-  function parseCSV(content: string): ParsedQuestion[] {
-    const lines = content.split('\n').filter((line) => line.trim());
-    if (lines.length < 2) {
-      toast.error('CSV file is empty or has only headers');
-      return [];
-    }
-
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-    const requiredColumns = ['question text', 'option a', 'option b', 'option c', 'option d', 'correct answer', 'difficulty'];
-    const missingColumns = requiredColumns.filter((col) => !headers.includes(col));
-
-    if (missingColumns.length > 0) {
-      toast.error(`Missing required columns: ${missingColumns.join(', ')}`);
-      return [];
-    }
-
-    const colIndex = {
-      topicName: headers.indexOf('topic name'),
-      questionText: headers.indexOf('question text'),
-      optionA: headers.indexOf('option a'),
-      optionB: headers.indexOf('option b'),
-      optionC: headers.indexOf('option c'),
-      optionD: headers.indexOf('option d'),
-      correctAnswer: headers.indexOf('correct answer'),
-      difficulty: headers.indexOf('difficulty'),
-      solution: headers.indexOf('solution'),
-    };
-
-    const parsed: ParsedQuestion[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map((v) => v.trim());
-      if (values.some((v) => v) === false) continue; // Skip empty rows
-      
-      const errors: string[] = [];
-      const questionText = values[colIndex.questionText] || '';
-      const optionA = values[colIndex.optionA] || '';
-      const optionB = values[colIndex.optionB] || '';
-      const optionC = values[colIndex.optionC] || '';
-      const optionD = values[colIndex.optionD] || '';
-      const correctAnswerRaw = values[colIndex.correctAnswer]?.toUpperCase() || '';
-      const difficulty = (values[colIndex.difficulty] || '').toLowerCase();
-      const solution = colIndex.solution >= 0 ? values[colIndex.solution] : undefined;
-      const topicName = colIndex.topicName >= 0 ? values[colIndex.topicName] : undefined;
-
-      // Validation
-      if (!questionText) errors.push('Missing question text');
-      if (!optionA) errors.push('Missing option A');
-      if (!optionB) errors.push('Missing option B');
-      if (!optionC) errors.push('Missing option C');
-      if (!optionD) errors.push('Missing option D');
-      if (!['A', 'B', 'C', 'D'].includes(correctAnswerRaw)) {
-        errors.push(`Invalid correct answer: "${correctAnswerRaw}" (must be A, B, C, or D)`);
-      }
-      if (!['easy', 'medium', 'hard'].includes(difficulty)) {
-        errors.push(`Invalid difficulty: "${difficulty}" (must be easy, medium, or hard)`);
-      }
-      if (questionText.length > 1000) errors.push('Question text is too long (max 1000 characters)');
-      if ([optionA, optionB, optionC, optionD].some((opt) => opt.length > 500)) {
-        errors.push('One or more options are too long (max 500 characters each)');
-      }
-
-      parsed.push({
-        topicName: topicName || undefined,
-        questionText,
-        optionA,
-        optionB,
-        optionC,
-        optionD,
-        correctAnswer: correctAnswerRaw as 'A' | 'B' | 'C' | 'D',
-        solution: solution || undefined,
-        difficulty: difficulty as 'easy' | 'medium' | 'hard',
-        rowNumber: i + 1,
-        errors,
-      });
-    }
-
-    return parsed;
-  }
-
-  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  const loadFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setCsvContent(content);
-      const parsed = parseCSV(content);
-      setParsedQuestions(parsed);
-      setUploadResult(null);
-    };
-    reader.readAsText(file);
-  }
-
-  function handlePasteCSV() {
-    const content = prompt('Paste CSV content here:');
-    if (content) {
-      setCsvContent(content);
-      const parsed = parseCSV(content);
-      setParsedQuestions(parsed);
-      setUploadResult(null);
-    }
-  }
-
-  async function handleImport() {
-    const validQuestions = parsedQuestions.filter((q) => q.errors.length === 0);
-
-    if (validQuestions.length === 0) {
-      toast.error('No valid questions to import. Fix errors first.');
+    if (!/\.(csv|txt)$/i.test(file.name)) {
+      toast.error('Please choose a .csv file');
       return;
     }
+    const text = await file.text();
+    const parsed = parseQuestionCsv(text);
+    setFileName(file.name);
+    setFatal(parsed.fatal ?? null);
+    setRows(parsed.rows);
+    setPage(0);
+    setSummary(null);
+    setStage(parsed.fatal ? 'idle' : 'preview');
+  }, []);
 
-    setUploading(true);
+  function updateRow(rowNumber: number, mutate: (r: ParsedQuestionRow) => ParsedQuestionRow) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.rowNumber !== rowNumber) return r;
+        const next = mutate({ ...r, images: { ...r.images }, errors: [...r.errors] });
+        validateRow(next);
+        return next;
+      })
+    );
+  }
+
+  async function handleAttach(file: File | undefined) {
+    const target = attachTarget.current;
+    if (!file || !target) return;
     try {
-      const result = await bulkUploadQuestions(
-        courseId,
-        validQuestions.map((q) => ({
-          topicName: q.topicName,
-          questionText: q.questionText,
-          optionA: q.optionA,
-          optionB: q.optionB,
-          optionC: q.optionC,
-          optionD: q.optionD,
-          correctAnswer: q.correctAnswer,
-          solution: q.solution,
-          difficulty: q.difficulty,
-        }))
-      );
-
-      setUploadResult(result);
-
-      if ('imported' in result && result.imported !== undefined) {
-        if (result.imported > 0) {
-          toast.success(`${result.imported} questions imported successfully!`);
-          setTimeout(() => {
-            router.push(`/admin/cbt/courses/${courseId}/questions`);
-          }, 2000);
-        }
-
-        if (result.errors && result.errors.length > 0) {
-          toast.error(`${result.failed} questions failed to import`);
-        }
-      } else if ('error' in result) {
-        toast.error(result.error || 'Failed to import questions');
-      }
+      const uri = await fileToDataUri(file);
+      updateRow(target.rowNumber, (r) => {
+        r.images[target.slot] = uri;
+        return r;
+      });
     } catch (error) {
-      console.error('[handleImport]', error);
-      toast.error('Failed to import questions');
-    } finally {
-      setUploading(false);
+      toast.error((error as Error).message);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
+  async function runImport() {
+    if (valid.length === 0) return;
+    setStage('importing');
+
+    const batches: ParsedQuestionRow[][] = [];
+    let current: ParsedQuestionRow[] = [];
+    let size = 0;
+    for (const r of valid) {
+      const c = rowChars(r);
+      if (current.length > 0 && (current.length >= BATCH_MAX_ROWS || size + c > BATCH_MAX_CHARS)) {
+        batches.push(current);
+        current = [];
+        size = 0;
+      }
+      current.push(r);
+      size += c;
+    }
+    if (current.length) batches.push(current);
+
+    setProgress({ done: 0, total: valid.length });
+    let imported = 0;
+    const errors: string[] = [];
+    let processed = 0;
+
+    for (const batch of batches) {
+      try {
+        const res = await bulkUploadQuestions(courseId, batch.map(toInput));
+        if (res.success) {
+          imported += res.imported;
+          errors.push(...res.errors);
+        } else {
+          errors.push(...batch.map((r) => `Row ${r.rowNumber}: ${res.error}`));
+        }
+      } catch (error) {
+        errors.push(...batch.map((r) => `Row ${r.rowNumber}: ${(error as Error).message}`));
+      }
+      processed += batch.length;
+      setProgress({ done: processed, total: valid.length });
+    }
+
+    setSummary({ imported, errors });
+    setStage('done');
+    if (imported > 0) toast.success(`${imported} question${imported === 1 ? '' : 's'} imported`);
   }
 
-  if (!course) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12 text-gray-500">
-            <p>Course not found</p>
-            <Button asChild className="mt-4">
-              <Link href="/admin/cbt/courses">Back to Courses</Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+  function reset() {
+    setStage('idle');
+    setRows([]);
+    setFileName('');
+    setFatal(null);
+    setSummary(null);
   }
 
-  const totalQuestions = parsedQuestions.length;
-  const validQuestions = parsedQuestions.filter((q) => q.errors.length === 0).length;
-  const invalidQuestions = totalQuestions - validQuestions;
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(AI_CSV_PROMPT);
+      toast.success('Prompt copied — paste it into your AI model');
+    } catch {
+      toast.error('Could not copy — select the text and copy manually');
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="space-y-6 p-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button asChild variant="ghost" size="icon">
-            <Link href={`/admin/cbt/courses/${courseId}/questions`}>
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Bulk Upload Questions</h1>
-            <p className="text-gray-600 mt-1">
-              {course.course_code} • {course.course_title}
-            </p>
-          </div>
-        </div>
+    <div className="mx-auto max-w-6xl p-6">
+      <Link href={`/admin/cbt/courses/${courseId}/questions`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900">
+        <ArrowLeft className="h-4 w-4" /> Back to questions
+      </Link>
+      <h1 className="text-3xl font-bold text-slate-900">Bulk upload questions</h1>
+      <p className="mb-6 mt-1 text-slate-600">{courseTitle && `${courseTitle} · `}Upload a CSV — diagrams can be embedded right in the file.</p>
 
-        {/* Upload Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload CSV File</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Instructions */}
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-900">
-                <p className="font-medium mb-2">CSV Format Requirements:</p>
-                <ul className="text-sm space-y-1 ml-4">
-                  <li>• Headers (case-insensitive): Topic Name (optional), Question Text, Option A-D, Correct Answer, Difficulty, Solution (optional)</li>  
-                  <li>• Correct Answer values: A, B, C, or D</li>
-                  <li>• Difficulty values: easy, medium, or hard</li>
-                  <li>• Maximum 1000 characters per question, 500 per option</li>
-                </ul>
-              </AlertDescription>
-            </Alert>
-
-            {/* File Upload Options */}
-            <div className="space-y-3">
-              <Label htmlFor="csv-file" className="text-base font-medium">
-                Choose File or Paste CSV
-              </Label>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Input
-                    id="csv-file"
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                    className="cursor-pointer"
-                  />
-                </div>
-                <Button variant="outline" onClick={handlePasteCSV}>
-                  Paste CSV
-                </Button>
-                <Button variant="outline" onClick={downloadTemplate}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Template
-                </Button>
-              </div>
+      {/* help */}
+      <Card className="mb-6">
+        <button onClick={() => setHelpOpen((o) => !o)} className="flex w-full items-center justify-between p-5 text-left">
+          <span className="font-semibold text-slate-900">CSV format, diagrams &amp; AI prompt</span>
+          <ChevronDown className={cn('h-5 w-5 text-slate-400 transition', helpOpen && 'rotate-180')} />
+        </button>
+        {helpOpen && (
+          <CardContent className="space-y-5 border-t pt-5 text-sm text-slate-700">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => download('cbt-questions-template.csv', buildCsvTemplate())}>
+                <Download className="mr-2 h-4 w-4" /> Download template (with 3 examples)
+              </Button>
+              <Button variant="outline" size="sm" onClick={copyPrompt}>
+                <Copy className="mr-2 h-4 w-4" /> Copy AI prompt
+              </Button>
             </div>
 
-            {/* CSV Preview */}
-            {csvContent && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">CSV Preview</Label>
-                <div className="bg-gray-50 border border-gray-200 rounded p-3 max-h-32 overflow-auto font-mono text-sm">
-                  {csvContent.slice(0, 500)}
-                  {csvContent.length > 500 && '...'}
-                </div>
-              </div>
-            )}
+            <div>
+              <p className="mb-1 font-medium text-slate-900">Columns</p>
+              <p className="font-mono text-xs leading-6 text-slate-600">{CSV_HEADERS.join(' · ')}</p>
+              <p className="mt-2">
+                <b>Topic Name</b> — type the topic for every question (e.g. <i>Algebra</i>, <i>Mechanics</i>). Topics are created automatically the first time they appear, so you never need to set them up
+                beforehand. Spelling and capital letters are matched loosely, and students&apos; topic performance is built from this column.
+              </p>
+              <p className="mt-2">
+                Required: <b>Question Text</b> (or Question Image), <b>Option A–D</b> (or an option image) and <b>Correct Answer</b> (A–D). Everything else is optional. Column names are
+                flexible (e.g. &quot;Answer&quot;, &quot;Explanation&quot;, &quot;Diagram&quot; also work).
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-1 font-medium text-slate-900">Putting a diagram in a cell</p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <b>Raw SVG</b> — paste <code>&lt;svg …&gt;…&lt;/svg&gt;</code>. Easiest for AI-written diagrams (geometry, circuits, graphs). Use single quotes inside the SVG.
+                </li>
+                <li>
+                  <b>Base64 data URI</b> — <code>data:image/png;base64,iVBOR…</code> (PNG, JPEG, WebP, GIF or SVG, up to 2 MB each).
+                </li>
+                <li>
+                  <b>Link</b> — a normal <code>https://…</code> image URL.
+                </li>
+              </ul>
+              <p className="mt-2 text-slate-500">
+                Images are uploaded to storage on import, and identical diagrams are stored once. Text AI models write SVG reliably; real PNG Base64 usually needs an AI with a code
+                tool (e.g. matplotlib). You can also attach a diagram to any row after uploading, in the preview below.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-1 font-medium text-slate-900">Maths &amp; chemistry</p>
+              <p>
+                Put LaTeX between dollar signs: <code>$x^2 - 5x + 6 = 0$</code>, <code>$\frac&#123;a&#125;&#123;b&#125;$</code>, <code>$\text&#123;H&#125;_2\text&#123;SO&#125;_4$</code>. For a literal dollar sign write <code>\$</code>.
+              </p>
+            </div>
+
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-4 text-xs text-slate-100">{AI_CSV_PROMPT}</pre>
           </CardContent>
-        </Card>
+        )}
+      </Card>
 
-        {/* Parsing Results & Preview */}
-        {parsedQuestions.length > 0 && (
-          <>
-            {/* Summary Stats */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">{totalQuestions}</div>
-                    <div className="text-sm text-gray-600">Total Questions</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">{validQuestions}</div>
-                    <div className="text-sm text-gray-600">Valid</div>
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${invalidQuestions > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {invalidQuestions}
-                    </div>
-                    <div className="text-sm text-gray-600">Errors</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      {/* upload */}
+      {(stage === 'idle' || stage === 'preview') && (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            void loadFile(e.dataTransfer.files?.[0]);
+          }}
+          className={cn(
+            'mb-6 flex flex-col items-center rounded-2xl border-2 border-dashed bg-white p-10 text-center transition',
+            dragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300'
+          )}
+        >
+          <Upload className="mb-3 h-10 w-10 text-slate-400" />
+          <p className="font-medium text-slate-900">{fileName || 'Drop your CSV here'}</p>
+          <p className="mb-4 text-sm text-slate-500">or choose a file from your computer</p>
+          <Button onClick={() => fileRef.current?.click()}>{fileName ? 'Choose a different file' : 'Choose CSV file'}</Button>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void loadFile(e.target.files?.[0])} />
+          {fatal && (
+            <p className="mt-4 flex max-w-xl items-start gap-2 rounded-lg bg-rose-50 p-3 text-left text-sm text-rose-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {fatal}
+            </p>
+          )}
+        </div>
+      )}
 
-            {/* Questions Preview */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview & Validation ({parsedQuestions.length} questions)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 max-h-96 overflow-y-auto">
-                {parsedQuestions.map((question) => (
-                  <div
-                    key={`q-${question.rowNumber}`}
-                    className={`border rounded-lg p-4 ${
-                      question.errors.length > 0
-                        ? 'bg-red-50 border-red-200'
-                        : 'bg-green-50 border-green-200'
-                    }`}
-                  >
-                    {/* Status & Row */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {question.errors.length > 0 ? (
-                          <AlertCircle className="w-5 h-5 text-red-600" />
+      {/* preview */}
+      {stage === 'preview' && (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">{valid.length} ready</span>
+            {invalid > 0 && <span className="rounded-full bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700">{invalid} with problems (will be skipped)</span>}
+            {withImages > 0 && <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">{withImages} with diagrams</span>}
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" onClick={reset}>
+                Cancel
+              </Button>
+              <Button onClick={runImport} disabled={valid.length === 0} className="bg-emerald-600 hover:bg-emerald-700">
+                Import {valid.length} question{valid.length === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Topics found in the file */}
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+            <p className="mb-2 text-sm font-semibold text-slate-900">Topics in this file ({topicSummary.topics.length})</p>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {topicSummary.topics.map((t) => (
+                <span key={t.label} className={cn('rounded-full border px-2.5 py-1', t.isNew ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-700')}>
+                  {t.label} · {t.count}
+                  {t.isNew && <b className="ml-1">NEW</b>}
+                </span>
+              ))}
+              {topicSummary.noTopic > 0 && (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800">
+                  {topicSummary.noTopic} question{topicSummary.noTopic === 1 ? '' : 's'} with no topic — they won&apos;t count in topic performance
+                </span>
+              )}
+            </div>
+          </div>
+
+          <input ref={attachRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+            void handleAttach(e.target.files?.[0]);
+            e.target.value = '';
+          }} />
+
+          <div className="space-y-3">
+            {pageRows.map((r) => {
+              const qImg = inspectImageCell(r.images.question);
+              const ok = r.errors.length === 0;
+              return (
+                <div key={r.rowNumber} className={cn('rounded-xl border bg-white p-4', ok ? 'border-slate-200' : 'border-rose-300')}>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Row {r.rowNumber}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-3 text-sm font-medium text-slate-900">
+                        <MathText text={r.questionText || '(diagram only)'} />
+                      </div>
+                      {qImg.previewSrc && qImg.kind !== 'invalid' && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={qImg.previewSrc} alt="Question diagram" className="mt-2 max-h-28 w-auto rounded border bg-white" />
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        {r.topicName ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{r.topicName}</span>
                         ) : (
-                          <CheckCircle className="w-5 h-5 text-green-600" />
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">No topic</span>
                         )}
-                        <span className="text-sm font-medium text-gray-700">
-                          Row {question.rowNumber}
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        {question.topicName && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium">
-                            {question.topicName}
-                          </span>
-                        )}
-                        <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded font-medium">
-                          {question.difficulty}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Question & Options */}
-                    <p className="font-medium text-gray-900 mb-2">{question.questionText}</p>
-                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                      <div className="text-gray-700">
-                        <span className="font-medium">A:</span> {question.optionA}
-                      </div>
-                      <div className="text-gray-700">
-                        <span className="font-medium">B:</span> {question.optionB}
-                      </div>
-                      <div className="text-gray-700">
-                        <span className="font-medium">C:</span> {question.optionC}
-                      </div>
-                      <div className="text-gray-700">
-                        <span className="font-medium">D:</span> {question.optionD}
-                      </div>
-                    </div>
-
-                    {/* Correct Answer */}
-                    <div className="mb-3 text-sm">
-                      <span className="font-medium text-gray-700">Correct Answer: </span>
-                      <span className="font-bold text-blue-600">{question.correctAnswer}</span>
-                    </div>
-
-                    {/* Solution */}
-                    {question.solution && (
-                      <div className="text-sm text-gray-700 mb-3">
-                        <span className="font-medium">Solution: </span>
-                        {question.solution}
-                      </div>
-                    )}
-
-                    {/* Errors */}
-                    {question.errors.length > 0 && (
-                      <div className="mt-3 space-y-1">
-                        {question.errors.map((error, idx) => (
-                          <div key={idx} className="text-sm text-red-700 flex items-start gap-2">
-                            <span className="mt-0.5">•</span>
-                            <span>{error}</span>
-                          </div>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 capitalize text-slate-600">{r.difficulty}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">Answer {r.correctAnswer || '?'}</span>
+                        {(['A', 'B', 'C', 'D'] as const).filter((l) => r.images[l]).map((l) => (
+                          <span key={l} className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Option {l} image</span>
                         ))}
+                        {r.images.solution && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Solution image</span>}
                       </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Import Results */}
-            {uploadResult && (
-              <Alert className={('imported' in uploadResult && uploadResult.imported > 0) ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
-                <CheckCircle className={`h-4 w-4 ${('imported' in uploadResult && uploadResult.imported > 0) ? 'text-green-600' : 'text-red-600'}`} />
-                <AlertDescription className={('imported' in uploadResult && uploadResult.imported > 0) ? 'text-green-900' : 'text-red-900'}>
-                  {'imported' in uploadResult ? (
-                    <>
-                      <p className="font-medium mb-2">
-                        Import Result: {uploadResult.imported} imported, {uploadResult.failed} failed
-                      </p>
-                      {uploadResult.errors && uploadResult.errors.length > 0 && (
-                        <ul className="text-sm space-y-1 ml-4">
-                          {uploadResult.errors.slice(0, 5).map((error, idx) => (
-                            <li key={idx}>• {error}</li>
+                      {r.errors.length > 0 && (
+                        <ul className="mt-2 space-y-0.5 text-xs text-rose-600">
+                          {r.errors.map((e, i) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {e}
+                            </li>
                           ))}
-                          {uploadResult.errors.length > 5 && (
-                            <li>... and {uploadResult.errors.length - 5} more errors</li>
-                          )}
                         </ul>
                       )}
-                    </>
-                  ) : (
-                    <p className="font-medium">Error: {uploadResult.error}</p>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={r.images.question ? 'Replace question diagram' : 'Attach question diagram'}
+                        onClick={() => {
+                          attachTarget.current = { rowNumber: r.rowNumber, slot: 'question' };
+                          attachRef.current?.click();
+                        }}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" title="Remove row" onClick={() => setRows((prev) => prev.filter((x) => x.rowNumber !== r.rowNumber))}>
+                        <Trash2 className="h-4 w-4 text-rose-500" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 justify-end">
-              <Button asChild variant="outline">
-                <Link href={`/admin/cbt/courses/${courseId}/questions`}>
-                  Cancel
-                </Link>
+          {pageCount > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                Previous
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={validQuestions === 0 || uploading}
-                className="gap-2"
-              >
-                <Upload className="w-4 h-4" />
-                {uploading ? 'Importing...' : `Import ${validQuestions} Questions`}
+              <span className="text-sm text-slate-500">
+                Page {page + 1} of {pageCount}
+              </span>
+              <Button variant="outline" size="sm" disabled={page >= pageCount - 1} onClick={() => setPage((p) => p + 1)}>
+                Next
               </Button>
             </div>
-          </>
-        )}
+          )}
+        </>
+      )}
 
-        {/* Empty State */}
-        {parsedQuestions.length === 0 && csvContent === '' && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-12">
-                <Upload className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-sm">Upload a CSV file to get started</p>
-                <p className="text-gray-400 text-xs mt-2">Download the template for the correct format</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      {/* importing */}
+      {stage === 'importing' && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-blue-600" />
+            <p className="text-lg font-semibold text-slate-900">
+              Importing {progress.done} / {progress.total}
+            </p>
+            <div className="mx-auto mt-4 h-2.5 max-w-md overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
+            </div>
+            <p className="mt-3 text-sm text-slate-500">Uploading diagrams and saving questions. Keep this tab open.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* done */}
+      {stage === 'done' && summary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-emerald-600" /> Import finished
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-lg">
+              <b className="text-emerald-700">{summary.imported}</b> imported
+              {summary.errors.length > 0 && (
+                <>
+                  , <b className="text-rose-600">{summary.errors.length}</b> failed
+                </>
+              )}
+              {invalid > 0 && (
+                <>
+                  , <b className="text-amber-600">{invalid}</b> skipped (problems in the CSV)
+                </>
+              )}
+            </p>
+            {summary.errors.length > 0 && (
+              <ul className="max-h-60 space-y-1 overflow-auto rounded-lg bg-rose-50 p-4 text-sm text-rose-700">
+                {summary.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-3">
+              <Button asChild>
+                <Link href={`/admin/cbt/courses/${courseId}/questions`}>View questions</Link>
+              </Button>
+              <Button variant="outline" onClick={reset}>
+                Upload another file
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

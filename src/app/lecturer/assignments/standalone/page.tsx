@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import CopyButton from './copy-button'
 import DeleteAssignmentButton from '@/components/delete-assignment-button'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 export default async function LecturerStandaloneAssignmentsPage() {
   const user = await getCurrentUser()
@@ -70,7 +71,7 @@ export default async function LecturerStandaloneAssignmentsPage() {
             {assignments.map((assignment: any) => {
               const deadline = new Date(assignment.deadline)
               const isOverdue = deadline < new Date()
-              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+              const baseUrl = getSiteUrl()
               const shareableLink = `${baseUrl}/assignments/${assignment.access_code}`
 
               return (

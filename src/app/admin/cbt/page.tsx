@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, BookOpen, Package, Users, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
+import { CbtAccessToggle } from '@/components/cbt/CbtAccessToggle';
 import { getAllCourses } from '@/lib/actions/admin-cbt-courses.actions';
 import { getAllBundles } from '@/lib/actions/admin-cbt-bundles.actions';
 import { getAllSubscriptions } from '@/lib/actions/admin-cbt-subscriptions.actions';
@@ -86,6 +87,9 @@ export default function AdminCBTDashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Free / subscription switch */}
+        <CbtAccessToggle />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   CheckCircle, XCircle, Loader2, ArrowLeft, AlertCircle,
   User, Mail, Lock, Phone, Building2, GraduationCap,
-  FileText, Hash
+  FileText, Hash, Target, BookOpen
 } from 'lucide-react'
 
 export default function SignUpPage() {
@@ -26,6 +26,11 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [title, setTitle] = useState<string>('')
   const [level, setLevel] = useState<string>('')
+  // Student sub-type: regular university student, or a Jambite preparing for JAMB
+  const [studentType, setStudentType] = useState<'university' | 'jambite'>('university')
+  const [jambInst, setJambInst] = useState<[string, string]>(['', ''])
+  const [jambCourse, setJambCourse] = useState<[string, string]>(['', ''])
+  const isJambite = role === 'student' && studentType === 'jambite'
   const [institutionId, setInstitutionId] = useState<string>('')
   const [institutions, setInstitutions] = useState<any[]>([])
   const [loadingInstitutions, setLoadingInstitutions] = useState(true)
@@ -140,7 +145,21 @@ export default function SignUpPage() {
       ? instCodeId
       : institutionId
 
-    if (!resolvedInstitutionId) {
+    const jambInstitutions = jambInst.map((v) => v.trim()).filter(Boolean)
+    const jambCourses = jambCourse.map((v) => v.trim()).filter(Boolean)
+
+    if (isJambite) {
+      if (jambInstitutions.length < 1) {
+        setError('Enter at least one institution you want to attend')
+        setLoading(false)
+        return
+      }
+      if (jambCourses.length < 1) {
+        setError('Enter at least one course you want to study')
+        setLoading(false)
+        return
+      }
+    } else if (!resolvedInstitutionId) {
       setError('Please select your institution or enter an institution code')
       setLoading(false)
       return
@@ -159,16 +178,19 @@ export default function SignUpPage() {
       lastName: formData.get('lastName') as string,
       role,
       title: role === 'lecturer' ? title : undefined,
-      institutionId: resolvedInstitutionId,
-      matricNumber: role === 'student' ? (formData.get('matricNumber') as string) : undefined,
+      institutionId: isJambite ? undefined : resolvedInstitutionId,
+      matricNumber: role === 'student' && !isJambite ? (formData.get('matricNumber') as string) : undefined,
       staffId: role === 'lecturer' ? (formData.get('staffId') as string) : undefined,
-      department: formData.get('department') as string,
-      faculty: formData.get('faculty') as string,
-      level: role === 'student' && level ? parseInt(level) : undefined,
+      department: isJambite ? undefined : (formData.get('department') as string),
+      faculty: isJambite ? undefined : (formData.get('faculty') as string),
+      level: role === 'student' && !isJambite && level ? parseInt(level) : undefined,
+      studentType: role === 'student' ? studentType : undefined,
+      jambInstitutions: isJambite ? jambInstitutions : undefined,
+      jambCourses: isJambite ? jambCourses : undefined,
       phone: formData.get('phone') as string,
       referralCode: role === 'lecturer' && referralCode.trim() ? referralCode.trim().toUpperCase() : undefined,
       // Pass institution code so auth.actions.ts can link them
-      institutionCode: instCodeStatus === 'valid' ? institutionCode.trim().toUpperCase() : undefined,
+      institutionCode: !isJambite && instCodeStatus === 'valid' ? institutionCode.trim().toUpperCase() : undefined,
     }
 
     const result = await signUp(data)
@@ -240,7 +262,69 @@ export default function SignUpPage() {
                   </div>
                 )}
 
+                {/* Student type: university student or Jambite */}
+                {role === 'student' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      { v: 'university', title: 'University / Polytechnic student', sub: 'I already have a matric number', icon: <GraduationCap className="w-5 h-5" /> },
+                      { v: 'jambite', title: "I'm a Jambite", sub: 'Preparing for JAMB (free CBT practice)', icon: <Target className="w-5 h-5" /> },
+                    ] as const).map((o) => (
+                      <button
+                        type="button"
+                        key={o.v}
+                        onClick={() => setStudentType(o.v)}
+                        className={`flex items-start gap-3 rounded-lg border-2 p-4 text-left transition ${studentType === o.v ? 'border-[#2563EB] bg-[#EFF6FF]' : 'border-[#E5E7EB] hover:border-[#9CA3AF]'}`}
+                      >
+                        <span className={`mt-0.5 ${studentType === o.v ? 'text-[#2563EB]' : 'text-[#6B7280]'}`}>{o.icon}</span>
+                        <span>
+                          <span className="block font-semibold text-[#1F2A5A]">{o.title}</span>
+                          <span className="block text-xs text-[#6B7280]">{o.sub}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Jambite: desired institutions and courses */}
+                {isJambite && (
+                  <div className="space-y-5 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-4">
+                    <div className="space-y-2">
+                      <Label className="text-[#1F2A5A] font-medium">Institutions you want to attend * <span className="text-xs font-normal text-[#6B7280]">(1st choice required, 2nd optional)</span></Label>
+                      {[0, 1].map((i) => (
+                        <div key={i} className="relative">
+                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6B7280]" />
+                          <Input
+                            value={jambInst[i]}
+                            onChange={(e) => setJambInst((p) => (i === 0 ? [e.target.value, p[1]] : [p[0], e.target.value]))}
+                            required={i === 0}
+                            maxLength={120}
+                            placeholder={i === 0 ? '1st choice, e.g. University of Port Harcourt' : '2nd choice (optional)'}
+                            className="pl-10 h-12 border-[#E5E7EB] bg-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[#1F2A5A] font-medium">Courses you want to study * <span className="text-xs font-normal text-[#6B7280]">(1st choice required, 2nd optional)</span></Label>
+                      {[0, 1].map((i) => (
+                        <div key={i} className="relative">
+                          <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6B7280]" />
+                          <Input
+                            value={jambCourse[i]}
+                            onChange={(e) => setJambCourse((p) => (i === 0 ? [e.target.value, p[1]] : [p[0], e.target.value]))}
+                            required={i === 0}
+                            maxLength={120}
+                            placeholder={i === 0 ? '1st choice, e.g. Medicine and Surgery' : '2nd choice (optional)'}
+                            className="pl-10 h-12 border-[#E5E7EB] bg-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Institution — two ways to specify */}
+                {!isJambite && (
                 <div className="space-y-3">
                   <Label className="text-[#1F2A5A] font-medium">Institution *</Label>
 
@@ -320,6 +404,7 @@ export default function SignUpPage() {
                     )}
                   </div>
                 </div>
+                )}
 
                 {/* Lecturer-specific: Title & Referral Code */}
                 {role === 'lecturer' && (
@@ -406,7 +491,7 @@ export default function SignUpPage() {
                 </div>
 
                 {/* Student-specific */}
-                {role === 'student' && (
+                {role === 'student' && !isJambite && (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="matricNumber" className="text-[#1F2A5A] font-medium">Matric Number *</Label>
@@ -443,6 +528,7 @@ export default function SignUpPage() {
                 )}
 
                 {/* Faculty & Department */}
+                {!isJambite && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="faculty" className="text-[#1F2A5A] font-medium">Faculty *</Label>
@@ -459,6 +545,7 @@ export default function SignUpPage() {
                     </div>
                   </div>
                 </div>
+                )}
 
                 <Button
                   type="submit"

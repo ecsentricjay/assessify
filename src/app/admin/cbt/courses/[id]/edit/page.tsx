@@ -239,6 +239,7 @@ export default function EditCoursePage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Topics ({topics.length})</CardTitle>
+            <p className="text-sm text-gray-500">Optional. Topics are also created automatically when you upload questions (CSV <b>Topic Name</b> column) or type a topic in the question form.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Add Topic Form */}

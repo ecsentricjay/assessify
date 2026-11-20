@@ -145,7 +145,7 @@ export default function BundlesPage() {
                   <CardContent className="flex-1 space-y-4">
                     {/* Course Count */}
                     <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                      <span className="text-sm text-gray-600">Courses Included</span>
+                      <span className="text-sm text-gray-600">Subjects Included</span>
                       <span className="font-bold text-lg text-blue-600">
                         {bundle.courseCount}
                       </span>

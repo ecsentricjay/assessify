@@ -11,6 +11,7 @@ import { getLecturerStandaloneTests } from '@/lib/actions/test.actions'
 import CopyButton from '@/components/assignment/copy-button'
 import { formatDistanceToNow } from 'date-fns'
 import type { TestWithDetails } from '@/lib/types/test.types'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 export default function StandaloneTestsPage() {
   const [tests, setTests] = useState<TestWithDetails[]>([])
@@ -176,7 +177,7 @@ export default function StandaloneTestsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {tests.map((test) => {
-              const shareableLink = `${window.location.origin}/tests/${test.access_code}`
+              const shareableLink = `${getSiteUrl()}/tests/${test.access_code}`
               const isExpired = new Date(test.end_time) < new Date()
               
               return (

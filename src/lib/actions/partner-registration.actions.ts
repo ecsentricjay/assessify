@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 interface ActionError extends Error {
   message: string;
@@ -65,7 +66,7 @@ export async function registerAsPartner(formData: {
           last_name: formData.lastName.trim(),
           role: 'partner',
         },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/partner/login`,
+        emailRedirectTo: `${getSiteUrl()}/partner/login`,
       },
     });
 

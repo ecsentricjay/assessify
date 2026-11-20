@@ -28,6 +28,15 @@ const ROLE_ROUTES: Record<string, string[]> = {
   '/admin':               ['admin', 'super_admin'],
 }
 
+// Student routes a Jambite may open (everything else under /student redirects to the dashboard)
+const JAMBITE_ALLOWED = [
+  '/student/dashboard',
+  '/student/cbt',
+  '/student/study-aid',
+  '/student/wallet',
+  '/student/profile',
+]
+
 // Where to send each role after login
 const ROLE_HOME: Record<string, string> = {
   student:            '/student/dashboard',
@@ -118,11 +127,12 @@ export async function middleware(request: NextRequest) {
   // 5. User is authenticated — fetch their role from profiles
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, student_type')
     .eq('id', user.id)
     .single()
 
   const role = profile?.role as string | undefined
+  const isJambite = role === 'student' && profile?.student_type === 'jambite'
 
   // 6. If trying to access auth pages while logged in → redirect to their dashboard
   if (pathname.startsWith('/auth/')) {
@@ -142,7 +152,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 8. All checks passed
+  // 8. Jambites only get JAMB CBT practice, Study Aid, wallet (to pay for them) and profile
+  if (isJambite && (pathname === '/student' || pathname.startsWith('/student/'))) {
+    const allowed = JAMBITE_ALLOWED.some(r => pathname === r || pathname.startsWith(r + '/'))
+    if (!allowed) return redirectTo(request, '/student/dashboard')
+  }
+
+  // 9. All checks passed
   return supabaseResponse
 }
 

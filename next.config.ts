@@ -3,7 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Production optimizations
   reactStrictMode: true,
-  
+
+  // CBT bulk upload sends Base64 diagrams inside server-action payloads (the UI batches
+  // them to stay well under this). Default is 1MB, which a single diagram can exceed.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '8mb',
+    },
+  },
+
   // Image optimization
   images: {
     domains: [

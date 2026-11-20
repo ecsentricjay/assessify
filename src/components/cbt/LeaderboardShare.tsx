@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Copy, CheckCircle, Twitter, MessageCircle, Facebook } from 'lucide-react'
 import { toast } from 'sonner'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 interface LeaderboardShareProps {
   bundleName: string
@@ -17,7 +18,7 @@ export function LeaderboardShare({
   rank,
   score,
   totalParticipants,
-  baseUrl = typeof window !== 'undefined' ? window.location.origin : '',
+  baseUrl = getSiteUrl(),
 }: LeaderboardShareProps) {
   const [copied, setCopied] = useState(false)
 

@@ -1,277 +1,184 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, BookOpen, Users, TrendingUp, Clock, Trophy } from 'lucide-react';
 import Link from 'next/link';
-import { getMyActiveSubscriptions, getMySubscriptions } from '@/lib/actions/student-cbt-purchase.actions';
-import { getMyPromoCode, getMyPromoStats } from '@/lib/actions/promo-codes.actions';
-import { toast } from 'sonner';
+import { ArrowRight, BarChart3, Flame, Gift, Loader2, Play, Target, Trophy, Wallet } from 'lucide-react';
 
-interface Stats {
-  activeSubscriptions: number;
-  totalCourses: number;
-  totalSessionsTaken: number;
-  promoEarnings: number;
+import { Button } from '@/components/ui/button';
+import { getCbtAccessMode } from '@/lib/actions/cbt-settings.actions';
+import { getMyPerformanceStats, getMyPracticeSessions } from '@/lib/actions/student-cbt-practice.actions';
+import { getMyPromoCode, getMyPromoStats } from '@/lib/actions/promo-codes.actions';
+import { cn } from '@/lib/utils';
+
+interface RecentSession {
+  id: string;
+  score_percentage: number | null;
+  total_questions: number;
+  completed_at: string | null;
+  status: string;
+  course?: { course_title?: string; course_code?: string } | null;
 }
 
 export default function CBTDashboard() {
-  const [stats, setStats] = useState<Stats>({
-    activeSubscriptions: 0,
-    totalCourses: 0,
-    totalSessionsTaken: 0,
-    promoEarnings: 0,
-  });
-  const [promoCode, setPromoCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [subscriptionRequired, setSubscriptionRequired] = useState(false);
+  const [stats, setStats] = useState({ totalSessions: 0, averageScore: 0, bestScore: 0, totalQuestions: 0 });
+  const [recent, setRecent] = useState<RecentSession[]>([]);
+  const [active, setActive] = useState<RecentSession | null>(null);
+  const [promoCode, setPromoCode] = useState<string | null>(null);
+  const [promoEarnings, setPromoEarnings] = useState(0);
 
   useEffect(() => {
-    loadData();
+    (async () => {
+      try {
+        const [mode, perf, sessions, promo, promoStats] = await Promise.all([
+          getCbtAccessMode(),
+          getMyPerformanceStats(),
+          getMyPracticeSessions({ limit: 30 }),
+          getMyPromoCode(),
+          getMyPromoStats(),
+        ]);
+
+        setSubscriptionRequired(mode.subscriptionRequired);
+        if (perf.success) setStats(perf.stats);
+        if (sessions.success && sessions.sessions) {
+          const list = sessions.sessions as RecentSession[];
+          setRecent(list.filter((s) => s.status === 'completed').slice(0, 5));
+          setActive(list.find((s) => s.status === 'in_progress') ?? null);
+        }
+        if (promo.success && promo.code) setPromoCode(promo.code.code);
+        if (promoStats.success && promoStats.stats) setPromoEarnings(promoStats.stats.totalEarnings || 0);
+      } catch (error) {
+        console.error('[CBTDashboard]', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
-
-  async function loadData() {
-    try {
-      setLoading(true);
-      const [subsRes, promoRes, statsRes] = await Promise.all([
-        getMyActiveSubscriptions(),
-        getMyPromoCode(),
-        getMyPromoStats(),
-      ]);
-
-      if (subsRes.success && subsRes.subscriptions) {
-        const subs = subsRes.subscriptions as any[];
-        setStats((prev) => ({
-          ...prev,
-          activeSubscriptions: subs.length,
-          totalCourses: subs.length,
-        }));
-      }
-
-      if (promoRes.success && promoRes.code) {
-        setPromoCode(promoRes.code.code);
-      }
-
-      if (statsRes.success && statsRes.stats) {
-        setStats((prev) => ({
-          ...prev,
-          promoEarnings: statsRes.stats.totalEarnings || 0,
-        }));
-      }
-    } catch (error) {
-      console.error('[loadData]', error);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
       </div>
     );
   }
 
+  const statCards = [
+    { label: 'Tests taken', value: stats.totalSessions, icon: <Flame className="h-5 w-5" />, tone: 'bg-orange-50 text-orange-600' },
+    { label: 'Average score', value: `${stats.averageScore}%`, icon: <BarChart3 className="h-5 w-5" />, tone: 'bg-blue-50 text-blue-600' },
+    { label: 'Best score', value: `${stats.bestScore}%`, icon: <Trophy className="h-5 w-5" />, tone: 'bg-amber-50 text-amber-600' },
+    { label: 'Questions answered', value: stats.totalQuestions.toLocaleString(), icon: <Target className="h-5 w-5" />, tone: 'bg-emerald-50 text-emerald-600' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">My CBT Dashboard</h1>
-          <p className="text-gray-600 mt-2">Track your progress and manage your subscriptions</p>
+    <div className="min-h-screen bg-slate-50 pb-16">
+      <div className="bg-gradient-to-br from-[#1F2A5A] via-[#26357a] to-[#2563EB] text-white">
+        <div className="mx-auto max-w-6xl px-4 pb-14 pt-10">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold sm:text-4xl">JAMB CBT Practice</h1>
+            {!subscriptionRequired && (
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-300/40">
+                <Gift className="h-3.5 w-3.5" /> Free for everyone
+              </span>
+            )}
+          </div>
+          <p className="mt-2 max-w-xl text-blue-100">Practise in a real CBT environment, see your mistakes explained, and watch your scores climb before exam day.</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button asChild size="lg" className="bg-white font-semibold text-[#1F2A5A] hover:bg-blue-50">
+              <Link href="/student/cbt/courses">
+                <Play className="mr-2 h-5 w-5" /> Start practising
+              </Link>
+            </Button>
+            {active && (
+              <Button asChild size="lg" variant="outline" className="border-amber-300 bg-amber-400/20 text-white hover:bg-amber-400/30 hover:text-white">
+                <Link href={`/student/cbt/practice/session/${active.id}`}>Resume unfinished test</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto -mt-6 max-w-6xl space-y-6 px-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {statCards.map((s) => (
+            <div key={s.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <span className={cn('mb-2 flex h-9 w-9 items-center justify-center rounded-lg', s.tone)}>{s.icon}</span>
+              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-xs text-slate-500">{s.label}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Subscriptions</CardTitle>
-              <BookOpen className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.activeSubscriptions}</div>
-              <p className="text-xs text-gray-500 mt-1">Active bundles</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
-              <BookOpen className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCourses}</div>
-              <p className="text-xs text-gray-500 mt-1">Courses you have access to</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Promo Earnings</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₦{stats.promoEarnings.toLocaleString()}</div>
-              <p className="text-xs text-gray-500 mt-1">From referrals</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sessions Taken</CardTitle>
-              <Clock className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalSessionsTaken}</div>
-              <p className="text-xs text-gray-500 mt-1">Practice sessions</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="text-lg">Start Practicing</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-gray-600">
-                Begin a practice session on one of your active courses.
-              </p>
-              <Button asChild className="w-full">
-                <Link href="/student/cbt/courses">My Courses</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="text-lg">Browse Bundles</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-gray-600">
-                Explore and purchase new practice test bundles.
-              </p>
-              <Button asChild className="w-full" variant="outline">
-                <Link href="/student/cbt/bundles">View Bundles</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="text-lg">Share & Earn</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-gray-600">
-                {promoCode
-                  ? 'Share your promo code and earn from referrals.'
-                  : 'Get a promo code and start earning referral commissions.'}
-              </p>
-              <Button asChild className="w-full" variant="outline">
-                <Link href="/student/profile/promo">My Promo Code</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-purple-600" />
-                Leaderboard
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-gray-600">
-                See how you rank against other students on practice bundles.
-              </p>
-              <Button asChild className="w-full" variant="default">
-                <Link href="/student/cbt/leaderboard">View Rankings</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Promo Code Section */}
-        {promoCode && (
-          <Card className="mb-8 border-green-200 bg-green-50">
-            <CardHeader>
-              <CardTitle>Your Promo Code</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <p className="text-gray-600">
-                  Share this code with friends and family to earn commissions on their purchases.
-                </p>
-                <div className="p-4 bg-white border-2 border-green-300 rounded-lg text-center">
-                  <p className="text-xs text-gray-500 mb-1">Your Referral Code</p>
-                  <p className="text-3xl font-mono font-bold text-green-600">{promoCode}</p>
-                </div>
-                <p className="text-sm text-gray-600">
-                  💡 When someone uses your code, you earn part of their purchase!
-                </p>
+        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+          {/* recent */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900">Recent results</h2>
+              <Link href="/student/cbt/progress" className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+                Full progress <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            {recent.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="mb-4 text-slate-500">You haven&apos;t taken a test yet.</p>
+                <Button asChild>
+                  <Link href="/student/cbt/courses">Take your first test</Link>
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {recent.map((s) => {
+                  const score = Math.round(Number(s.score_percentage ?? 0));
+                  return (
+                    <li key={s.id}>
+                      <Link href={`/student/cbt/practice/results/${s.id}`} className="flex items-center justify-between gap-3 py-3 hover:text-blue-700">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-slate-900">{s.course?.course_title ?? 'Practice test'}</p>
+                          <p className="text-xs text-slate-500">
+                            {s.completed_at ? new Date(s.completed_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : ''} · {s.total_questions} questions
+                          </p>
+                        </div>
+                        <span className={cn('rounded-full px-3 py-1 text-sm font-bold', score >= 50 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700')}>{score}%</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-        {/* Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">How to Get Started</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex gap-3">
-                <div className="shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  1
-                </div>
-                <p>Browse available practice test bundles</p>
+          {/* side links */}
+          <div className="space-y-4">
+            <Link href="/student/cbt/leaderboard" className="flex items-center gap-4 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-5 shadow-sm transition hover:shadow-md">
+              <Trophy className="h-8 w-8 text-purple-600" />
+              <div>
+                <p className="font-semibold text-slate-900">Leaderboard</p>
+                <p className="text-sm text-slate-600">See how you rank</p>
               </div>
-              <div className="flex gap-3">
-                <div className="shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  2
-                </div>
-                <p>Purchase a bundle using wallet or card</p>
-              </div>
-              <div className="flex gap-3">
-                <div className="shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  3
-                </div>
-                <p>Start practicing with random questions</p>
-              </div>
-              <div className="flex gap-3">
-                <div className="shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  4
-                </div>
-                <p>Review results and track progress</p>
-              </div>
-            </CardContent>
-          </Card>
+            </Link>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Pro Tips for Success</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>
-                ✓ <strong>Take multiple sessions</strong> - Each session has different random questions
-              </p>
-              <p>
-                ✓ <strong>Review mistakes</strong> - Learn from wrong answers to improve
-              </p>
-              <p>
-                ✓ <strong>Track progress</strong> - Monitor your score improvements over time
-              </p>
-              <p>
-                ✓ <strong>Use promo codes</strong> - Get discounts when purchasing bundles
-              </p>
-              <p>
-                ✓ <strong>Share your code</strong> - Earn commissions by referring friends
-              </p>
-            </CardContent>
-          </Card>
+            {subscriptionRequired && (
+              <Link href="/student/cbt/bundles" className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+                <Wallet className="h-8 w-8 text-blue-600" />
+                <div>
+                  <p className="font-semibold text-slate-900">Plans & bundles</p>
+                  <p className="text-sm text-slate-600">Unlock more subjects</p>
+                </div>
+              </Link>
+            )}
+
+            {promoCode && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <p className="text-xs text-slate-500">Your referral code</p>
+                <p className="font-mono text-2xl font-bold text-emerald-700">{promoCode}</p>
+                <p className="mt-1 text-xs text-slate-600">Earned so far: ₦{promoEarnings.toLocaleString()}</p>
+                <Link href="/student/profile/promo" className="mt-2 inline-block text-sm font-medium text-emerald-700 hover:underline">
+                  Manage code →
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, ReactNode } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { FooterContent } from '@/components/footer/footer-content';
+import { getCbtAccessMode } from '@/lib/actions/cbt-settings.actions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type RoleKey = 'students' | 'lecturers' | 'institutions';
@@ -85,6 +86,20 @@ function FadeIn({ children, delay = 0, className = '' }: FadeInProps) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AssessifyLanding() {
   const [activeRole, setActiveRole] = useState<RoleKey>('students');
+  // JAMB campaign copy says "Free" only while the admin switch keeps CBT practice free
+  const [cbtFree, setCbtFree] = useState(true);
+  // Hero carousel: 0 = main platform pitch, 1 = JAMB campaign
+  const [slide, setSlide] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return;
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = setInterval(() => setSlide((n) => (n + 1) % 2), 6500);
+    return () => clearInterval(id);
+  }, [paused, slide]);
+  useEffect(() => {
+    getCbtAccessMode().then((r) => setCbtFree(!r.subscriptionRequired)).catch(() => {});
+  }, []);
 
   const roles: Record<RoleKey, Role> = {
     students: {
@@ -235,6 +250,7 @@ export default function AssessifyLanding() {
             <span style={{ fontWeight: 800, fontSize: 18, letterSpacing: -0.5, color: '#111827' }}>ASSESSIFY</span>
           </Link>
           <div className="hide-mobile" style={{ display: 'flex', gap: 36 }}>
+            <a href="#jamb" className="nav-link">JAMB Practice</a>
             <a href="#benefits" className="nav-link">Benefits</a>
             <a href="#how" className="nav-link">How It Works</a>
           </div>
@@ -260,44 +276,116 @@ export default function AssessifyLanding() {
         <div style={{ position: 'absolute', inset: 0, opacity: 0.035, backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)', backgroundSize: '60px 60px', pointerEvents: 'none' }} />
 
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 24px', width: '100%' }}>
-          <div style={{ textAlign: 'center', maxWidth: 820, margin: '0 auto' }}>
+          <div
+            style={{ maxWidth: 820, margin: '0 auto' }}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onFocus={() => setPaused(true)}
+            onBlur={() => setPaused(false)}
+          >
+            {/* Both slides share one grid cell so the hero never changes height */}
+            <div style={{ display: 'grid' }}>
 
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(21,101,245,0.2)', border: '1px solid rgba(21,101,245,0.5)', borderRadius: 100, padding: '6px 16px', marginBottom: 32 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00CFFF', display: 'inline-block' }} />
-              <span style={{ color: '#7EC8FF', fontSize: 13, fontWeight: 600 }}>Nigeria&apos;s #1 Assessment Platform</span>
-            </div>
-
-            <h1 className="hero-title" style={{ fontSize: 72, fontWeight: 800, color: '#fff', lineHeight: 1.05, letterSpacing: -2, marginBottom: 24 }}>
-              Smarter assessments.{' '}
-              <span style={{ fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', color: '#00CFFF' }}>Better results.</span>
-              <br />Happier lecturers.
-            </h1>
-
-            <p style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.7, marginBottom: 40, fontWeight: 400 }}>
-              AI-assisted grading, plagiarism detection, AI Study Aid for smart learning,
-              and a built-in wallet system — all designed for Nigerian universities, polytechnics, and students.
-            </p>
-
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 64 }}>
-              <Link href="/auth/signup" className="btn-primary" style={{ fontSize: 16, padding: '16px 32px' }}>
-                Start for free — no card needed →
-              </Link>
-              <Link href="/student" className="btn-outline" style={{ fontSize: 16, padding: '16px 32px' }}>
-                Try AI Study Aid →
-              </Link>
-            </div>
-
-            {/* Trust badges */}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {[
-                '✓ AI-assisted grading',
-                '✓ Instant plagiarism detection',
-                '✓ AI Study Aid with 3 free questions',
-                '✓ Withdraw earnings anytime',
-              ].map((t) => (
-                <div key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,207,255,0.08)', border: '1px solid rgba(0,207,255,0.2)', borderRadius: 100, padding: '7px 16px', color: '#94B8D0', fontSize: 13, fontWeight: 500 }}>
-                  {t}
+              {/* Slide 1 — main platform pitch */}
+              <div
+                aria-hidden={slide !== 0}
+                style={{ gridArea: '1 / 1', textAlign: 'center', opacity: slide === 0 ? 1 : 0, visibility: slide === 0 ? 'visible' : 'hidden', transform: slide === 0 ? 'translateY(0)' : 'translateY(14px)', transition: 'opacity .7s ease, transform .7s ease, visibility .7s' }}
+              >
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(21,101,245,0.2)', border: '1px solid rgba(21,101,245,0.5)', borderRadius: 100, padding: '6px 16px', marginBottom: 32 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00CFFF', display: 'inline-block' }} />
+                  <span style={{ color: '#7EC8FF', fontSize: 13, fontWeight: 600 }}>Nigeria&apos;s #1 Assessment Platform</span>
                 </div>
+
+                <h1 className="hero-title" style={{ fontSize: 72, fontWeight: 800, color: '#fff', lineHeight: 1.05, letterSpacing: -2, marginBottom: 24 }}>
+                  Smarter assessments.{' '}
+                  <span style={{ fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', color: '#00CFFF' }}>Better results.</span>
+                  <br />Happier lecturers.
+                </h1>
+
+                <p style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.7, marginBottom: 40, fontWeight: 400 }}>
+                  AI-assisted grading, plagiarism detection, AI Study Aid for smart learning,
+                  and a built-in wallet system — all designed for Nigerian universities, polytechnics, and students.
+                </p>
+
+                <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 64 }}>
+                  <Link href="/auth/signup" className="btn-primary" style={{ fontSize: 16, padding: '16px 32px' }} tabIndex={slide === 0 ? 0 : -1}>
+                    Start for free — no card needed →
+                  </Link>
+                  <Link href="/student" className="btn-outline" style={{ fontSize: 16, padding: '16px 32px' }} tabIndex={slide === 0 ? 0 : -1}>
+                    Try AI Study Aid →
+                  </Link>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {[
+                    '✓ AI-assisted grading',
+                    '✓ Instant plagiarism detection',
+                    '✓ AI Study Aid with 3 free questions',
+                    '✓ Withdraw earnings anytime',
+                  ].map((t) => (
+                    <div key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,207,255,0.08)', border: '1px solid rgba(0,207,255,0.2)', borderRadius: 100, padding: '7px 16px', color: '#94B8D0', fontSize: 13, fontWeight: 500 }}>
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Slide 2 — JAMB campaign */}
+              <div
+                aria-hidden={slide !== 1}
+                style={{ gridArea: '1 / 1', textAlign: 'center', opacity: slide === 1 ? 1 : 0, visibility: slide === 1 ? 'visible' : 'hidden', transform: slide === 1 ? 'translateY(0)' : 'translateY(14px)', transition: 'opacity .7s ease, transform .7s ease, visibility .7s' }}
+              >
+                <Link href="/auth/signup" tabIndex={slide === 1 ? 0 : -1} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(250,204,21,0.14)', border: '1px solid rgba(250,204,21,0.55)', borderRadius: 100, padding: '7px 18px', marginBottom: 32, textDecoration: 'none' }}>
+                  <span style={{ background: '#FACC15', color: '#111827', fontSize: 11, fontWeight: 800, borderRadius: 100, padding: '2px 8px', letterSpacing: 0.5 }}>{cbtFree ? 'FREE' : 'NEW'}</span>
+                  <span style={{ color: '#FDE68A', fontSize: 13, fontWeight: 700 }}>JAMB CBT practice for every Nigerian student →</span>
+                </Link>
+
+                <h1 className="hero-title" style={{ fontSize: 72, fontWeight: 800, color: '#fff', lineHeight: 1.05, letterSpacing: -2, marginBottom: 24 }}>
+                  Improve your{' '}
+                  <span style={{ fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', color: '#00CFFF' }}>JAMB score.</span>
+                  <br />Practise like it&apos;s the real exam.
+                </h1>
+
+                <p style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.7, marginBottom: 40, fontWeight: 400 }}>
+                  {cbtFree ? 'Free' : 'Timed'} JAMB CBT practice with thousands of past-style questions, worked solutions and instant scoring —
+                  for English, Maths, Physics, Chemistry, Biology and more.
+                </p>
+
+                <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 64 }}>
+                  <Link href="/auth/signup" className="btn-primary" style={{ fontSize: 16, padding: '16px 32px' }} tabIndex={slide === 1 ? 0 : -1}>
+                    {cbtFree ? 'Start free JAMB practice →' : 'Start JAMB practice →'}
+                  </Link>
+                  <Link href="#jamb" className="btn-outline" style={{ fontSize: 16, padding: '16px 32px' }} tabIndex={slide === 1 ? 0 : -1}>
+                    See how it works
+                  </Link>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {[
+                    cbtFree ? '✓ 100% free JAMB practice' : '✓ Full JAMB practice mode',
+                    '✓ Real JAMB-style timer',
+                    '✓ Worked solutions & diagrams',
+                    '✓ Works on any phone',
+                  ].map((t) => (
+                    <div key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,207,255,0.08)', border: '1px solid rgba(0,207,255,0.2)', borderRadius: 100, padding: '7px 16px', color: '#94B8D0', fontSize: 13, fontWeight: 500 }}>
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Carousel dots */}
+            <div role="tablist" aria-label="Hero slides" style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 40 }}>
+              {['Platform overview', 'Free JAMB practice'].map((label, i) => (
+                <button
+                  key={label}
+                  role="tab"
+                  aria-selected={slide === i}
+                  aria-label={label}
+                  onClick={() => setSlide(i)}
+                  style={{ width: slide === i ? 32 : 10, height: 10, borderRadius: 100, border: 'none', cursor: 'pointer', padding: 0, background: slide === i ? (i === 1 ? '#FACC15' : '#00CFFF') : 'rgba(255,255,255,0.3)', transition: 'all .3s ease' }}
+                />
               ))}
             </div>
           </div>
@@ -322,6 +410,52 @@ export default function AssessifyLanding() {
           ))}
         </div>
       </div>
+
+      {/* ─── JAMB CBT CAMPAIGN ───────────────────────────────────────────────── */}
+      <section id="jamb" style={{ padding: '90px 24px', background: 'linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 100%)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <FadeIn>
+            <div style={{ textAlign: 'center', marginBottom: 48 }}>
+              <div style={{ display: 'inline-block', background: '#FEF3C7', color: '#B45309', fontSize: 13, fontWeight: 800, padding: '4px 14px', borderRadius: 100, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+                {cbtFree ? 'Free JAMB CBT Practice' : 'JAMB CBT Practice'}
+              </div>
+              <h2 className="section-title" style={{ fontSize: 46, fontWeight: 800, letterSpacing: -1.5, color: '#111827', lineHeight: 1.1, marginBottom: 16 }}>
+                Score higher in JAMB —{' '}
+                <span style={{ fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', color: '#2563EB' }}>one practice test at a time.</span>
+              </h2>
+              <p style={{ fontSize: 18, color: '#6B7280', maxWidth: 620, margin: '0 auto' }}>
+                Sit the same kind of timed computer-based test you&apos;ll face on exam day, see exactly where you&apos;re losing marks, and fix it before it counts.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 20, marginBottom: 40 }}>
+            {[
+              { icon: '⏱️', title: 'Real exam feel', desc: 'Countdown timer, question palette and auto-submit, just like JAMB CBT.' },
+              { icon: '📚', title: 'Every subject', desc: 'English, Maths, Physics, Chemistry, Biology and more, by topic or full mock.' },
+              { icon: '💡', title: 'Worked solutions', desc: 'Study mode shows the answer and explanation straight away, with diagrams.' },
+              { icon: '📈', title: 'Track your progress', desc: 'Scores, weak topics and past attempts so you know what to revise next.' },
+            ].map((f, i) => (
+              <FadeIn key={f.title} delay={i * 60}>
+                <div className="benefit-card">
+                  <div style={{ fontSize: 28, marginBottom: 12 }}>{f.icon}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: '#111827', marginBottom: 6 }}>{f.title}</div>
+                  <div style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6 }}>{f.desc}</div>
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <Link href="/auth/signup" className="btn-primary" style={{ fontSize: 17, padding: '16px 36px' }}>
+              {cbtFree ? 'Create free account & start practising →' : 'Create account & start practising →'}
+            </Link>
+            <p style={{ marginTop: 14, fontSize: 14, color: '#6B7280' }}>
+              Already registered? <Link href="/student/cbt/courses" style={{ color: '#2563EB', fontWeight: 600 }}>Go to practice tests</Link>
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* ─── WHO BENEFITS ────────────────────────────────────────────────────── */}
       <section id="benefits" style={{ padding: '100px 24px', background: '#FAFAFA' }}>
@@ -534,7 +668,7 @@ export default function AssessifyLanding() {
             </p>
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
               <Link href="/auth/signup" className="btn-primary" style={{ background: '#2563EB', fontSize: 17, padding: '18px 36px' }}>
-                Create free account →
+                {cbtFree ? 'Start free JAMB practice →' : 'Create account →'}
               </Link>
               <Link href="/auth/login" className="btn-outline" style={{ fontSize: 17, padding: '18px 36px' }}>
                 Log in

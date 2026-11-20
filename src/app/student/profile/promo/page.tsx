@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Copy, Check, TrendingUp, Users, ArrowLeft, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 interface PromoCode {
   promo_code: string
@@ -75,7 +76,7 @@ export default function StudentPromoPage() {
 
   function copyLink() {
     if (code?.promo_code && typeof window !== 'undefined') {
-      const link = `${window.location.origin}/student/cbt/bundles?ref=${code.promo_code}`
+      const link = `${getSiteUrl()}/student/cbt/bundles?ref=${code.promo_code}`
       navigator.clipboard.writeText(link)
       toast.success('Referral link copied!')
     }

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from './auth.actions'
 import { processSubmissionPayment } from './transaction.actions'
 import { sendAssignmentSubmittedEmail } from './email.actions'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 function createServiceClient() {
   return createAdminClient(
@@ -127,7 +128,7 @@ export async function createStandaloneAssignment(formData: {
     return { success: false, error: error.message }
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assessify.ng'
+  const baseUrl = getSiteUrl()
   const shareableLink = `${baseUrl}/assignments/${accessCode}`
 
   revalidatePath('/lecturer/assignments')

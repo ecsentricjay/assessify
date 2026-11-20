@@ -1,709 +1,327 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Trophy, 
-  Clock, 
-  Target, 
-  TrendingUp,
-  RefreshCw,
-  Home,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  Loader2
-} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { CheckCircle2, Clock, Lightbulb, Loader2, MinusCircle, RotateCcw, Target, Trophy, XCircle } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import { getSessionResults } from '@/lib/actions/student-cbt-practice.actions';
+import { RichContent } from '@/components/cbt/CbtContent';
+import { getSessionResults, startPracticeSession } from '@/lib/actions/student-cbt-practice.actions';
+import { OPTION_LETTERS, type SessionResultDTO } from '@/lib/types/cbt.types';
+import { cn } from '@/lib/utils';
 
-// ==================== TYPES ====================
+type Filter = 'all' | 'wrong' | 'unanswered' | 'correct';
 
-interface SessionQuestion {
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_answer: 'A' | 'B' | 'C' | 'D';
-  solution: string | null;
-  difficulty: 'easy' | 'medium' | 'hard';
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
 }
 
-interface SessionAnswer {
-  id: string;
-  question_id: string;
-  selected_answer: 'A' | 'B' | 'C' | 'D' | null;
-  is_correct: boolean;
-  question: SessionQuestion;
-}
-
-interface SessionResult {
-  sessionId: string;
-  status: string;
-  totalQuestions: number;
-  correctAnswers: number;
-  wrongAnswers: number;
-  scorePercentage: number;
-  completedAt: string;
-  answers: SessionAnswer[];
-}
-
-// ==================== CONSTANTS ====================
-
-const PASSING_SCORE = 50;
-const OPTIONS = {
-  A: 'option_a',
-  B: 'option_b',
-  C: 'option_c',
-  D: 'option_d',
-} as const;
-
-// ==================== UTILITY FUNCTIONS ====================
-
-/**
- * Get option label and text
- */
-function getOptionDisplay(question: SessionQuestion, option: 'A' | 'B' | 'C' | 'D') {
-  const key = OPTIONS[option] as keyof SessionQuestion;
-  return (question[key] as string) || '';
-}
-
-/**
- * Calculate statistics by difficulty level
- */
-function calculateStatsByDifficulty(answers: SessionAnswer[]) {
-  const stats = {
-    easy: { total: 0, correct: 0 },
-    medium: { total: 0, correct: 0 },
-    hard: { total: 0, correct: 0 },
-  };
-
-  answers.forEach((answer) => {
-    if (answer.question) {
-      const difficulty = answer.question.difficulty as keyof typeof stats;
-      stats[difficulty].total++;
-      if (answer.is_correct) {
-        stats[difficulty].correct++;
-      }
-    }
-  });
-
-  return stats;
-}
-
-/**
- * Get performance message based on score
- */
-function getPerformanceMessage(score: number): { message: string; emoji: string } {
-  if (score >= 90) {
-    return { message: 'Outstanding performance! 🌟', emoji: '🌟' };
-  }
-  if (score >= 80) {
-    return { message: 'Excellent work! 🎉', emoji: '🎉' };
-  }
-  if (score >= 70) {
-    return { message: 'Great job! Keep it up! 💪', emoji: '💪' };
-  }
-  if (score >= 50) {
-    return { message: 'Well done! You passed! ✨', emoji: '✨' };
-  }
-  if (score >= 30) {
-    return { message: 'Don\'t give up! Practice makes perfect 📚', emoji: '📚' };
-  }
-  return { message: 'Keep practicing! You\'ll get there 🚀', emoji: '🚀' };
-}
-
-/**
- * Format time (assuming milliseconds)
- */
-function formatTime(milliseconds: number): string {
-  const seconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  }
-  return `${seconds}s`;
-}
-
-// ==================== COMPONENTS ====================
-
-/**
- * Score Display Hero Section
- */
-function ScoreDisplay({ 
-  score, 
-  passed, 
-  totalQuestions,
-  correctAnswers 
-}: { 
-  score: number; 
-  passed: boolean;
-  totalQuestions: number;
-  correctAnswers: number;
-}) {
-  const { message, emoji } = getPerformanceMessage(score);
-
+function ScoreRing({ value, passed }: { value: number; passed: boolean }) {
+  const radius = 54;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - Math.min(100, Math.max(0, value)) / 100);
   return (
-    <div className="mb-8">
-      <Card className={`overflow-hidden ${passed ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-        <CardContent className="p-8">
-          <div className="flex flex-col items-center justify-center gap-6 py-4">
-            <div className="flex items-center justify-center">
-              {passed ? (
-                <Trophy className="h-16 w-16 text-green-600" />
-              ) : (
-                <AlertCircle className="h-16 w-16 text-red-600" />
-              )}
-            </div>
-
-            <div className="text-center">
-              <div className="mb-2 text-5xl font-bold sm:text-6xl">
-                <span className={passed ? 'text-green-700' : 'text-red-700'}>
-                  {score}%
-                </span>
-              </div>
-              <p className={`text-lg font-semibold ${passed ? 'text-green-700' : 'text-red-700'}`}>
-                {passed ? 'PASSED' : 'FAILED'}
-              </p>
-            </div>
-
-            <div className="text-center">
-              <p className="text-lg font-medium text-gray-700">{message}</p>
-              <p className="mt-2 text-sm text-gray-600">
-                You answered {correctAnswers} out of {totalQuestions} questions correctly
-              </p>
-            </div>
-
-            {!passed && (
-              <div className={`rounded-lg ${passed ? 'bg-green-100' : 'bg-red-100'} px-4 py-2`}>
-                <p className={`text-sm font-medium ${passed ? 'text-green-800' : 'text-red-800'}`}>
-                  Passing score: {PASSING_SCORE}%
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/**
- * Statistics Cards Grid
- */
-function StatisticsGrid({
-  totalQuestions,
-  correctAnswers,
-  wrongAnswers,
-  timeMs,
-}: {
-  totalQuestions: number;
-  correctAnswers: number;
-  wrongAnswers: number;
-  timeMs: number;
-}) {
-  const stats = [
-    {
-      icon: Target,
-      label: 'Questions',
-      value: totalQuestions,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
-    },
-    {
-      icon: CheckCircle,
-      label: 'Correct',
-      value: correctAnswers,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
-    },
-    {
-      icon: XCircle,
-      label: 'Wrong',
-      value: wrongAnswers,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
-    },
-    {
-      icon: Clock,
-      label: 'Time Taken',
-      value: formatTime(timeMs),
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50',
-      isTime: true,
-    },
-  ];
-
-  return (
-    <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => {
-        const Icon = stat.icon;
-        return (
-          <Card key={index} className={`border-0 ${stat.bgColor}`}>
-            <CardContent className="flex items-center gap-4 p-6">
-              <Icon className={`h-8 w-8 shrink-0 ${stat.color}`} />
-              <div>
-                <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-                <p className={`text-2xl font-bold ${stat.color}`}>
-                  {stat.value}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * Difficulty Breakdown Section
- */
-function DifficultyBreakdown({ 
-  stats 
-}: { 
-  stats: Record<'easy' | 'medium' | 'hard', { total: number; correct: number }> 
-}) {
-  const difficulties = [
-    { key: 'easy' as const, label: 'Easy', color: 'bg-green-100 text-green-800' },
-    { key: 'medium' as const, label: 'Medium', color: 'bg-amber-100 text-amber-800' },
-    { key: 'hard' as const, label: 'Hard', color: 'bg-red-100 text-red-800' },
-  ];
-
-  return (
-    <div className="mb-8">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-blue-600" />
-            <CardTitle>Performance by Difficulty</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {difficulties.map(({ key, label, color }) => {
-              const stat = stats[key];
-              const percentage = stat.total > 0 ? (stat.correct / stat.total) * 100 : 0;
-
-              return (
-                <div key={key}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge className={color}>{label}</Badge>
-                      <span className="font-medium text-gray-700">
-                        {stat.correct}/{stat.total}
-                      </span>
-                    </div>
-                    <span className="text-sm font-semibold text-gray-600">
-                      {Math.round(percentage)}%
-                    </span>
-                  </div>
-                  <Progress value={percentage} className="h-2" />
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/**
- * Question Review Item with Collapsible Details
- */
-function QuestionReviewItem({ 
-  answer, 
-  index 
-}: { 
-  answer: SessionAnswer; 
-  index: number 
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!answer.question) {
-    return null;
-  }
-
-  const { question } = answer;
-  const selectedOptionText = answer.selected_answer 
-    ? getOptionDisplay(question, answer.selected_answer)
-    : 'Not answered';
-  const correctOptionText = getOptionDisplay(question, question.correct_answer);
-
-  const bgColor = answer.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200';
-  const borderColor = answer.is_correct ? 'border-l-4 border-l-green-600' : 'border-l-4 border-l-red-600';
-
-  return (
-    <Card className={`overflow-hidden ${bgColor} ${borderColor} mb-4`}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full p-6 text-left hover:bg-opacity-75 transition-colors flex items-start justify-between"
-      >
-        <div className="flex-1">
-          <div className="flex items-start gap-3 mb-2">
-            <div className="shrink-0 mt-1">
-              {answer.is_correct ? (
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              ) : (
-                <XCircle className="h-5 w-5 text-red-600" />
-              )}
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 mb-1">
-                Question {index + 1}
-              </p>
-              <p className="text-sm text-gray-700 mb-3 line-clamp-2">
-                {question.question_text}
-              </p>
-
-              <div className="flex items-center gap-2 mb-2">
-                <Badge 
-                  variant="secondary"
-                  className={
-                    question.difficulty === 'easy' 
-                      ? 'bg-green-200 text-green-800'
-                      : question.difficulty === 'medium'
-                      ? 'bg-amber-200 text-amber-800'
-                      : 'bg-red-200 text-red-800'
-                  }
-                >
-                  {question.difficulty.charAt(0).toUpperCase() + question.difficulty.slice(1)}
-                </Badge>
-                <span className={`text-sm font-medium ${answer.is_correct ? 'text-green-700' : 'text-red-700'}`}>
-                  {answer.is_correct ? 'Correct' : 'Wrong'}
-                </span>
-              </div>
-
-              {!expanded && (
-                <div className="text-xs text-gray-600 mt-2">
-                  <p>Your answer: <span className="font-semibold">{answer.selected_answer}</span></p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="shrink-0 ml-4 mt-2">
-          {expanded ? (
-            <ChevronUp className="h-5 w-5 text-gray-600" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-gray-600" />
-          )}
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-gray-200 px-6 py-4 bg-opacity-50">
-          <div className="space-y-4">
-            {/* Options Grid */}
-            <div>
-              <h4 className="mb-3 font-semibold text-gray-800">Options</h4>
-              <div className="space-y-2">
-                {['A', 'B', 'C', 'D'].map((option) => {
-                  const optionChar = option as 'A' | 'B' | 'C' | 'D';
-                  const text = getOptionDisplay(question, optionChar);
-                  const isSelected = answer.selected_answer === optionChar;
-                  const isCorrect = question.correct_answer === optionChar;
-
-                  let bgClass = 'bg-white hover:bg-gray-50';
-                  let borderClass = 'border-gray-200';
-                  let textClass = 'text-gray-700';
-
-                  if (isSelected && isCorrect) {
-                    bgClass = 'bg-green-100';
-                    borderClass = 'border-green-400';
-                    textClass = 'text-green-900 font-semibold';
-                  } else if (isSelected && !isCorrect) {
-                    bgClass = 'bg-red-100';
-                    borderClass = 'border-red-400';
-                    textClass = 'text-red-900 font-semibold';
-                  } else if (isCorrect) {
-                    bgClass = 'bg-green-50';
-                    borderClass = 'border-green-300';
-                    textClass = 'text-green-900';
-                  }
-
-                  return (
-                    <div
-                      key={optionChar}
-                      className={`rounded-lg border-2 ${borderClass} ${bgClass} p-3 ${textClass}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="font-bold">{optionChar}.</span>
-                        <div className="flex-1">
-                          <p className="text-sm">{text}</p>
-                          <div className="mt-1 flex gap-2">
-                            {isSelected && (
-                              <span className="text-xs font-semibold text-gray-600">
-                                📌 Your answer
-                              </span>
-                            )}
-                            {isCorrect && (
-                              <span className="text-xs font-semibold text-green-700">
-                                ✓ Correct
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Solution/Explanation */}
-            {question.solution && (
-              <div className="mt-4 rounded-lg bg-blue-50 p-3 border border-blue-200">
-                <h4 className="mb-2 font-semibold text-blue-900">Explanation</h4>
-                <p className="text-sm text-blue-900 leading-relaxed">
-                  {question.solution}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/**
- * Question Review Section
- */
-function QuestionReview({ answers }: { answers: SessionAnswer[] }) {
-  const [expandAll, setExpandAll] = useState(false);
-
-  return (
-    <div className="mb-8">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-blue-600" />
-              <CardTitle>Question Review</CardTitle>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setExpandAll(!expandAll)}
-            >
-              {expandAll ? 'Collapse All' : 'Expand All'}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {answers.map((answer, index) => (
-              <QuestionReviewItem
-                key={answer.id}
-                answer={answer}
-                index={index}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/**
- * Action Buttons Section
- */
-function ActionButtons({ sessionId }: { sessionId: string }) {
-  const router = useRouter();
-
-  return (
-    <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-      <Button
-        size="lg"
-        className="gap-2"
-        onClick={() => router.push('/student/cbt/courses')}
-      >
-        <Home className="h-4 w-4" />
-        Back to Courses
-      </Button>
-      <Button
-        size="lg"
-        variant="outline"
-        className="gap-2"
-        onClick={() => router.push('/student/cbt/progress')}
-      >
-        <TrendingUp className="h-4 w-4" />
-        View My Progress
-      </Button>
-      <Button
-        size="lg"
-        variant="secondary"
-        className="gap-2"
-        onClick={() => router.push('/student/cbt/courses')}
-      >
-        <RefreshCw className="h-4 w-4" />
-        Practice Again
-      </Button>
-    </div>
-  );
-}
-
-/**
- * Error State Component
- */
-function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md border-red-200 bg-red-50">
-        <CardContent className="p-8">
-          <div className="flex flex-col items-center text-center">
-            <AlertCircle className="mb-4 h-12 w-12 text-red-600" />
-            <h2 className="mb-2 text-xl font-bold text-red-900">Error Loading Results</h2>
-            <p className="mb-6 text-sm text-red-700">{error}</p>
-            <div className="flex gap-3">
-              <Button onClick={onRetry} variant="destructive">
-                Try Again
-              </Button>
-              <Link href="/student/cbt/courses">
-                <Button variant="outline">
-                  Back to Courses
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/**
- * Loading State Component
- */
-function LoadingState() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-gray-600">Loading your results...</p>
+    <div className="relative h-40 w-40">
+      <svg viewBox="0 0 128 128" className="h-full w-full -rotate-90">
+        <circle cx="64" cy="64" r={radius} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="10" />
+        <circle
+          cx="64"
+          cy="64"
+          r={radius}
+          fill="none"
+          stroke={passed ? '#34d399' : '#fbbf24'}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 900ms ease-out' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-4xl font-bold">{Math.round(value)}%</span>
+        <span className="text-xs uppercase tracking-wider text-blue-200">score</span>
       </div>
     </div>
   );
 }
 
-// ==================== MAIN PAGE COMPONENT ====================
-
-export default function ResultsPage() {
+export default function PracticeResultsPage() {
   const params = useParams();
+  const router = useRouter();
   const sessionId = params.sessionId as string;
 
+  const [result, setResult] = useState<SessionResultDTO | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<SessionResult | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
-    loadResults();
-  }, [sessionId]);
-
-  async function loadResults() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await getSessionResults(sessionId);
-
-      if (!response.success) {
-        setError(response.error || 'Failed to load results');
+    (async () => {
+      const res = await getSessionResults(sessionId);
+      if (!res.success) {
+        toast.error(res.error || 'Could not load results');
+        router.replace('/student/cbt/courses');
         return;
       }
-
-      setResults(response.result as SessionResult);
-      toast.success('Results loaded successfully!');
-    } catch (err) {
-      console.error('[ResultsPage] Error:', err);
-      setError('An unexpected error occurred. Please try again.');
-      toast.error('Failed to load results');
-    } finally {
+      if (res.result.status === 'in_progress') {
+        router.replace(`/student/cbt/practice/session/${sessionId}`);
+        return;
+      }
+      setResult(res.result);
       setLoading(false);
+    })();
+  }, [sessionId, router]);
+
+  const missed = useMemo(() => result?.questions.filter((q) => !q.isCorrect) ?? [], [result]);
+
+  const visible = useMemo(() => {
+    if (!result) return [];
+    switch (filter) {
+      case 'wrong':
+        return result.questions.filter((q) => q.selected && !q.isCorrect);
+      case 'unanswered':
+        return result.questions.filter((q) => !q.selected);
+      case 'correct':
+        return result.questions.filter((q) => q.isCorrect);
+      default:
+        return result.questions;
+    }
+  }, [result, filter]);
+
+  async function retryMissed() {
+    if (!result || missed.length === 0) return;
+    setRetrying(true);
+    const res = await startPracticeSession({
+      courseId: result.courseId,
+      questionCount: missed.length,
+      questionIds: missed.map((q) => q.id),
+      mode: 'study',
+      timeLimitMinutes: null,
+    });
+    if (res.success) router.push(`/student/cbt/practice/session/${res.sessionId}`);
+    else {
+      toast.error(res.error || 'Could not start a retry session');
+      setRetrying(false);
     }
   }
 
-  if (loading) {
-    return <LoadingState />;
+  if (loading || !result) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+      </div>
+    );
   }
 
-  if (error || !results) {
-    return <ErrorState error={error || 'No results found'} onRetry={loadResults} />;
-  }
+  const message =
+    result.scorePercentage >= 70
+      ? { title: 'Excellent work!', body: "You're on track for a strong JAMB score. Keep the momentum going." }
+      : result.passed
+      ? { title: 'Good job!', body: 'Solid result. Review the ones you missed to push higher.' }
+      : { title: 'Keep going!', body: "Every attempt teaches you something. Retry the questions you missed — that's where the marks are." };
 
-  const passed = results.scorePercentage >= PASSING_SCORE;
-  const statsByDifficulty = calculateStatsByDifficulty(results.answers);
-
-  // Calculate time in milliseconds (assuming completedAt is ISO string)
-  const startTime = new Date('2000-01-01').getTime(); // Placeholder
-  const endTime = results.completedAt ? new Date(results.completedAt).getTime() : Date.now();
-  const timeMs = endTime - startTime;
+  const tabs: Array<{ id: Filter; label: string; count: number }> = [
+    { id: 'all', label: 'All', count: result.questions.length },
+    { id: 'wrong', label: 'Wrong', count: result.wrongAnswers },
+    { id: 'unanswered', label: 'Skipped', count: result.unanswered },
+    { id: 'correct', label: 'Correct', count: result.correctAnswers },
+  ];
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-            Practice Session Results
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Session completed on {new Date(results.completedAt).toLocaleDateString()} at{' '}
-            {new Date(results.completedAt).toLocaleTimeString()}
-          </p>
+    <div className="min-h-screen bg-slate-50 pb-16">
+      {/* hero */}
+      <div className="bg-gradient-to-br from-[#1F2A5A] via-[#26357a] to-[#2563EB] text-white">
+        <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 pb-12 pt-10 text-center sm:flex-row sm:text-left">
+          <ScoreRing value={result.scorePercentage} passed={result.passed} />
+          <div>
+            <p className="text-sm font-medium text-blue-200">
+              {result.courseCode} · {result.courseTitle}
+            </p>
+            <h1 className="mt-1 flex items-center justify-center gap-2 text-3xl font-bold sm:justify-start">
+              {result.passed && <Trophy className="h-7 w-7 text-amber-300" />}
+              {message.title}
+            </h1>
+            <p className="mt-2 max-w-md text-blue-100">{message.body}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto -mt-6 max-w-4xl space-y-5 px-4">
+        {/* stats */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Correct', value: result.correctAnswers, icon: <CheckCircle2 className="h-5 w-5" />, tone: 'text-emerald-600 bg-emerald-50' },
+            { label: 'Wrong', value: result.wrongAnswers, icon: <XCircle className="h-5 w-5" />, tone: 'text-rose-600 bg-rose-50' },
+            { label: 'Skipped', value: result.unanswered, icon: <MinusCircle className="h-5 w-5" />, tone: 'text-amber-600 bg-amber-50' },
+            { label: 'Time', value: formatDuration(result.timeTakenSeconds), icon: <Clock className="h-5 w-5" />, tone: 'text-blue-600 bg-blue-50' },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <span className={cn('mb-2 flex h-9 w-9 items-center justify-center rounded-lg', s.tone)}>{s.icon}</span>
+              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-xs text-slate-500">{s.label}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Main Results */}
-        <ScoreDisplay
-          score={results.scorePercentage}
-          passed={passed}
-          totalQuestions={results.totalQuestions}
-          correctAnswers={results.correctAnswers}
-        />
-
-        {/* Statistics */}
-        <StatisticsGrid
-          totalQuestions={results.totalQuestions}
-          correctAnswers={results.correctAnswers}
-          wrongAnswers={results.wrongAnswers}
-          timeMs={timeMs}
-        />
-
-        {/* Difficulty Breakdown */}
-        <DifficultyBreakdown stats={statsByDifficulty} />
-
-        {/* Question Review */}
-        <QuestionReview answers={results.answers} />
-
-        {/* Action Buttons */}
-        <ActionButtons sessionId={sessionId} />
-
-        {/* Footer Note */}
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            Need help? <Link href="/help" className="font-semibold text-blue-600 hover:text-blue-700">
-              View our guide
+        {/* actions */}
+        <div className="flex flex-wrap gap-3">
+          {missed.length > 0 && (
+            <Button onClick={retryMissed} disabled={retrying} className="bg-[#1F2A5A] hover:bg-[#2a3a7a]">
+              {retrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Target className="mr-2 h-4 w-4" />}
+              Retry the {missed.length} I missed
+            </Button>
+          )}
+          <Button variant="outline" asChild>
+            <Link href={`/student/cbt/courses/${result.courseId}/practice`}>
+              <RotateCcw className="mr-2 h-4 w-4" /> New session
             </Link>
-          </p>
+          </Button>
+          <Button variant="ghost" asChild>
+            <Link href="/student/cbt/courses">All subjects</Link>
+          </Button>
         </div>
+
+        {/* breakdowns */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 font-semibold text-slate-900">By difficulty</h2>
+            <div className="space-y-3">
+              {(['easy', 'medium', 'hard'] as const).map((d) => {
+                const { total, correct } = result.byDifficulty[d];
+                if (total === 0) return null;
+                const pct = Math.round((correct / total) * 100);
+                return (
+                  <div key={d}>
+                    <div className="mb-1 flex justify-between text-sm">
+                      <span className="capitalize text-slate-700">{d}</span>
+                      <span className="text-slate-500">
+                        {correct}/{total} · {pct}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={cn('h-full rounded-full', d === 'easy' ? 'bg-emerald-500' : d === 'medium' ? 'bg-amber-500' : 'bg-rose-500')}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 font-semibold text-slate-900">Topics to focus on</h2>
+            <ul className="space-y-3">
+              {result.byTopic.slice(0, 5).map((t) => {
+                const pct = Math.round((t.correct / t.total) * 100);
+                return (
+                  <li key={t.topic}>
+                    <div className="mb-1 flex justify-between text-sm">
+                      <span className="truncate pr-2 text-slate-700">{t.topic}</span>
+                      <span className="shrink-0 text-slate-500">
+                        {t.correct}/{t.total}
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={cn('h-full rounded-full', pct >= 70 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-rose-500')} style={{ width: `${pct}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
+
+        {/* review */}
+        <section>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-slate-900">Review your answers</h2>
+            <div className="flex gap-1.5 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={cn(
+                    'rounded-full px-3.5 py-1.5 text-sm font-medium transition',
+                    filter === t.id ? 'bg-[#1F2A5A] text-white' : 'text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  {t.label} <span className="opacity-70">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visible.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">Nothing here — nice.</p>
+          ) : (
+            <div className="space-y-4">
+              {visible.map((q) => (
+                <article key={q.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="rounded-lg bg-slate-900 px-2.5 py-1 text-sm font-bold text-white">Q{q.number}</span>
+                    {q.isCorrect ? (
+                      <span className="flex items-center gap-1 text-sm font-semibold text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Correct</span>
+                    ) : q.selected ? (
+                      <span className="flex items-center gap-1 text-sm font-semibold text-rose-600"><XCircle className="h-4 w-4" /> Wrong</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-sm font-semibold text-amber-600"><MinusCircle className="h-4 w-4" /> Skipped</span>
+                    )}
+                    {q.topicName && <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">{q.topicName}</span>}
+                  </div>
+
+                  <RichContent text={q.text} imageUrl={q.imageUrl} alt={`Diagram for question ${q.number}`} textClassName="text-base font-medium text-slate-900" />
+
+                  <div className="mt-4 space-y-2">
+                    {OPTION_LETTERS.map((letter) => {
+                      const isRight = q.correctAnswer === letter;
+                      const isWrongPick = q.selected === letter && !isRight;
+                      return (
+                        <div
+                          key={letter}
+                          className={cn(
+                            'flex items-start gap-3 rounded-lg border p-3 text-sm',
+                            isRight && 'border-emerald-400 bg-emerald-50',
+                            isWrongPick && 'border-rose-400 bg-rose-50',
+                            !isRight && !isWrongPick && 'border-slate-200'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                              isRight ? 'bg-emerald-500 text-white' : isWrongPick ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'
+                            )}
+                          >
+                            {letter}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <RichContent text={q.options[letter].text} imageUrl={q.options[letter].imageUrl} alt={`Option ${letter}`} textClassName="text-slate-800" />
+                          </div>
+                          {isRight && <span className="shrink-0 text-xs font-semibold text-emerald-700">Correct answer</span>}
+                          {isWrongPick && <span className="shrink-0 text-xs font-semibold text-rose-700">Your answer</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {(q.solution || q.solutionImageUrl) && (
+                    <div className="mt-4 rounded-lg bg-blue-50 p-4">
+                      <p className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-blue-700">
+                        <Lightbulb className="h-3.5 w-3.5" /> Explanation
+                      </p>
+                      <RichContent text={q.solution} imageUrl={q.solutionImageUrl} alt="Solution diagram" textClassName="text-sm leading-relaxed text-slate-700" />
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

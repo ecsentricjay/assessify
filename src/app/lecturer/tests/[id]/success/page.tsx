@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, Copy, Check, ExternalLink, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 export default function TestSuccessPage() {
   const params = useParams()
@@ -18,7 +19,7 @@ export default function TestSuccessPage() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
 
-  const shareableLink = `${window.location.origin}/tests/${accessCode}`
+  const shareableLink = `${getSiteUrl()}/tests/${accessCode}`
 
   const copyCode = () => {
     if (accessCode) {

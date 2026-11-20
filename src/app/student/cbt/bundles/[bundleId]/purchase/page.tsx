@@ -224,7 +224,7 @@ export default function PurchaseBundlePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Complete Your Purchase</h1>
           <p className="text-gray-600 mt-2">
-            Get instant access to {bundle.courseCount} courses and {bundle.maxPracticeSessions} practice sessions
+            Get instant access to {bundle.courseCount} subjects and {bundle.maxPracticeSessions} practice sessions
           </p>
         </div>
 
@@ -251,7 +251,7 @@ export default function PurchaseBundlePage() {
             <div className="grid grid-cols-3 gap-4 py-4 border-y">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{bundle.courseCount}</div>
-                <div className="text-xs text-gray-500 mt-1">Courses</div>
+                <div className="text-xs text-gray-500 mt-1">Subjects</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">{bundle.maxPracticeSessions}</div>
@@ -265,7 +265,7 @@ export default function PurchaseBundlePage() {
 
             {/* Included Courses */}
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Included Courses:</h3>
+              <h3 className="font-semibold text-gray-900 mb-2">Included Subjects:</h3>
               <ul className="space-y-1">
                 {bundle.courses.map((course) => (
                   <li key={course.id} className="flex items-center gap-2 text-sm text-gray-700">
@@ -466,8 +466,8 @@ export default function PurchaseBundlePage() {
                   <span className="font-semibold">₦{finalPrice.toLocaleString()}</span>
                 </p>
                 <p>
-                  <span className="text-gray-600">Courses Included:</span>{' '}
-                  <span className="font-semibold">{bundle.courseCount} courses</span>
+                  <span className="text-gray-600">Subjects Included:</span>{' '}
+                  <span className="font-semibold">{bundle.courseCount} subjects</span>
                 </p>
                 <p>
                   <span className="text-gray-600">Practice Sessions:</span>{' '}
@@ -483,7 +483,7 @@ export default function PurchaseBundlePage() {
             {/* Countdown Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
               <p className="text-sm text-gray-700">
-                Redirecting to courses in <span className="font-bold text-blue-600">{redirectCountdown}</span> seconds...
+                Redirecting to subjects in <span className="font-bold text-blue-600">{redirectCountdown}</span> seconds...
               </p>
             </div>
 

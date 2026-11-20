@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { getQuestionsByCourse, deleteQuestion, toggleQuestionStatus } from '@/lib/actions/admin-cbt-courses.actions';
 import { getCourseById } from '@/lib/actions/admin-cbt-courses.actions';
 import { toast } from 'sonner';
+import { RichContent } from '@/components/cbt/CbtContent';
 
 interface Course {
   id: string;
@@ -30,6 +31,12 @@ interface Question {
   is_active: boolean;
   times_attempted?: number;
   times_correct?: number;
+  question_image_url?: string | null;
+  option_a_image_url?: string | null;
+  option_b_image_url?: string | null;
+  option_c_image_url?: string | null;
+  option_d_image_url?: string | null;
+  solution_image_url?: string | null;
 }
 
 export default function CourseQuestionsPage() {
@@ -247,7 +254,7 @@ export default function CourseQuestionsPage() {
                         <div className="text-sm text-gray-600 mb-1">
                           Question {index + 1}
                         </div>
-                        <p className="text-gray-900 font-medium">{question.question_text}</p>
+                        <RichContent text={question.question_text} imageUrl={question.question_image_url} alt={`Diagram for question ${index + 1}`} textClassName="text-gray-900 font-medium" />
                       </div>
                       <div className="flex gap-2 ml-4">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>
@@ -261,10 +268,16 @@ export default function CourseQuestionsPage() {
 
                     {/* Options */}
                     <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                      <div className="text-gray-700">A: {question.option_a}</div>
-                      <div className="text-gray-700">B: {question.option_b}</div>
-                      <div className="text-gray-700">C: {question.option_c}</div>
-                      <div className="text-gray-700">D: {question.option_d}</div>
+                      {(['A', 'B', 'C', 'D'] as const).map((l) => {
+                        const text = question[`option_${l.toLowerCase()}` as 'option_a'];
+                        const img = question[`option_${l.toLowerCase()}_image_url` as 'option_a_image_url'];
+                        return (
+                          <div key={l} className="flex gap-1.5 text-gray-700">
+                            <span className="font-semibold">{l}:</span>
+                            <RichContent text={text} imageUrl={img} alt={`Option ${l}`} imageClassName="max-w-[140px]" />
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Stats & Actions */}

@@ -3,6 +3,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin, logAdminAction } from './admin-auth.actions'
+import { getSiteUrl } from '@/lib/utils/site-url'
 
 export type UserWithAuth = {
   id: string
@@ -430,7 +431,7 @@ export async function sendPasswordReset(userId: string) {
     const { error } = await supabase.auth.resetPasswordForEmail(
       authUser.user.email,
       {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/update-password`
+        redirectTo: `${getSiteUrl()}/auth/update-password`
       }
     )
 
